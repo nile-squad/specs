@@ -116,6 +116,14 @@ All SDKs are server-side. Client-side packages (browser, mobile) are a future sc
 - **Rationale** — One hook per lifecycle point. `before*` hooks allow payload enrichment (adding metadata, normalizing fields). `after*` hooks allow observability (logging, analytics) regardless of outcome. Hooks run synchronously in the call chain — `before*` is awaited before transport, `after*` is awaited before returning to the caller.
 - **Tradeoffs** — Hook errors propagate to the caller, which means a broken hook breaks the payment call. This is intentional: silent hook failures would create hard-to-debug divergence between what the hook logged and what actually happened.
 
+### D11: Integration tests are spec'd separately from unit tests
+
+- **Decision** — The spec defines a canonical integration test suite that every SDK implementation must run against a real sandbox backend. These tests are distinct from the unit test requirements (§Tests) which mock the transport layer.
+- **Context** — Unit tests with mocked transport verify SDK internals (signing, validation, retry logic). Integration tests verify the full round-trip: real HTTP calls, real server validation, real idempotency behavior, real error responses. A bug in the transport layer, URL construction, or header serialization is invisible to mocked tests but caught immediately by integration tests.
+- **Alternatives considered** — (a) Rely on unit tests only. Rejected: mocked transport cannot catch wire-format bugs, header mismatches, or server-side validation changes. (b) Let each SDK define its own integration tests. Rejected: without a canonical list, coverage drifts across languages — one SDK tests idempotency, another doesn't, and regressions go unnoticed until production.
+- **Rationale** — A spec'd integration test suite ensures cross-language parity. Every SDK, regardless of language, proves the same behaviors against the same backend. The suite is small (focused on contract verification, not exhaustive coverage) and runs in CI against a sandbox environment.
+- **Tradeoffs** — Integration tests are slower and require network access + valid sandbox credentials. They cannot run in offline CI environments. Mitigated by keeping the suite small (<20 tests) and providing a skip mechanism for environments without backend access.
+
 ## Operations
 
 The SDK exposes eight operations and one utility:
@@ -705,6 +713,49 @@ Every SDK must test the following edge cases:
 - Auto-generated references are unique across rapid sequential calls
 - Retry after 500 uses the same idempotency key (not a new one)
 
+### Integration Tests
+
+Every SDK must ship an integration test suite that runs against a real sandbox backend (not mocked transport). The suite verifies end-to-end contract compliance: real HTTP calls, real server-side validation, real idempotency behavior, and real error responses.
+
+**Environment:**
+
+- Tests require valid sandbox credentials (`apiKey` with `npk_test_` prefix, matching `apiSecret`).
+- Tests run in sandbox/test mode — no real money moves, sandbox provider resolves immediately.
+- A `NYLONPAY_TEST_MODE` environment variable (or language equivalent) gates tests that require live-only behavior (e.g., revoked key detection). These tests are skipped when the variable is not set to `live`.
+- Each test creates a fresh SDK instance with singleton bypass (`force: true` or equivalent) to prevent state leakage between test suites.
+
+**Required coverage — every SDK must implement these tests:**
+
+| # | Test | Operation | What it proves |
+|---|------|-----------|---------------|
+| I1 | Collect payment happy path | `collectPayment` | Returns a valid reference and pending status from the real server |
+| I2 | Get transaction after collect | `getTransaction` | Server-side record matches the reference returned by collect |
+| I3 | Idempotency on collect | `collectPayment` × 2 | Same `reference` returns the same transaction, not a duplicate |
+| I4 | Payout happy path | `makePayout` | Returns a valid reference and pending status from the real server |
+| I5 | Get transaction after payout | `getTransaction` | Server-side record matches the reference returned by payout |
+| I6 | Idempotency on payout | `makePayout` × 2 | Same `reference` returns the same transaction, not a duplicate |
+| I7 | Verify phone | `verifyPhone` | Returns a verified result with customer name from the real provider |
+| I8 | Key validation — missing apiKey | `createNylonPay` | Throws/returns error before any network call |
+| I9 | Key validation — bad apiKey prefix | `createNylonPay` | Throws/returns error for keys without `npk_` prefix |
+| I10 | Key validation — missing apiSecret | `createNylonPay` | Throws/returns error before any network call |
+| I11 | Key validation — bad apiSecret prefix | `createNylonPay` | Throws/returns error for secrets without `nps_` prefix |
+| I12 | Singleton behavior | `createNylonPay` × 2 | Second call without `force` returns the same instance |
+| I13 | Unknown reference | `getTransaction` | Returns error for a reference that doesn't exist |
+| I14 | Sub-minimum amount | `collectPayment` | Server rejects amounts below 500 with a validation error |
+| I15 | Revoked key (live-only) | `collectPayment` | Server returns 401 for a revoked API key. Skipped unless `NYLONPAY_TEST_MODE=live` |
+
+**Test isolation rules:**
+
+- Each test uses a unique `reference` (either auto-generated or explicitly unique per run) to prevent cross-test idempotency collisions.
+- Tests do not depend on execution order. Each test is independently runnable.
+- Tests do not assert on server-side timing (e.g., "response arrived within 2 seconds") — sandbox latency is non-deterministic.
+- Tests do not assert on internal server state beyond what the SDK's public API returns.
+
+**Cross-language parity:**
+
+- Every SDK language runs the same 15 tests (I1–I15). Language-specific additions are permitted but must not replace or weaken the canonical set.
+- Test names must reference the spec ID (e.g., `I3: idempotency on collect`) so coverage audits can trace from spec to implementation.
+
 ### Spec Compliance
 
 No SDK adds operations, parameters, events, or behavior beyond what this spec defines. If a feature is needed across SDKs, this spec updates first — then all implementations follow. Language-specific conveniences (e.g., helper functions that compose existing operations) are permitted only if they do not introduce new server interactions or alter the documented contract.
@@ -724,6 +775,8 @@ No SDK adds operations, parameters, events, or behavior beyond what this spec de
 11. All public types, functions, and constants are documented. No undocumented public surface exists.
 12. `before*` hooks run after input validation and before the transport call. They cannot bypass validation. `after*` hooks run after the transport call, regardless of success or failure. Both are awaited synchronously in the call chain.
 13. A `before*` hook that returns `null` or `void` leaves the payload unchanged. Only a non-null return value replaces the input. Hook errors propagate to the caller — they are not caught or swallowed by the SDK.
+14. Integration tests run against a real sandbox backend, not mocked transport. Every SDK implementation covers the same canonical test set (I1–I15) with spec IDs traceable from this document to the test code.
+15. Integration tests are isolated: each test uses a unique reference, does not depend on execution order, and does not assert on non-deterministic server timing.
 
 ## Prohibitions
 
