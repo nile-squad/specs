@@ -108,6 +108,14 @@ All SDKs are server-side. Client-side packages (browser, mobile) are a future sc
 - **Rationale** — Two patterns for two use cases. Event-driven for long-lived server processes. Blocking resolve for simple integrations. Both use the same underlying transport and polling — the resolve variant is a convenience wrapper.
 - **Tradeoffs** — Slightly larger API surface. Offset by the clarity of having one function per use case instead of requiring composition.
 
+### D10: Lifecycle hooks for cross-cutting concerns
+
+- **Decision** — The SDK exposes optional `beforeCollect`, `afterCollect`, `beforePayout`, and `afterPayout` hooks registered once at initialization via `NylonPayConfig.hooks`.
+- **Context** — Merchants need to intercept payment calls for logging, analytics, metadata enrichment, and audit trails without wrapping every SDK call in their own middleware. Before we had hooks, merchants had to wrap every `collectPayment` call manually — leading to duplicated logic and missed edge cases (e.g., the error path not being instrumented).
+- **Alternatives considered** — (a) Middleware stack (array of functions applied in sequence). Rejected: unnecessary complexity when a single hook per event is sufficient; arrays imply ordering and composition semantics that create confusion. (b) Event emitter on the SDK instance. Rejected: event emitters are appropriate for repeated events, not single-shot lifecycle points; `afterCollect` fires exactly once per call, not on a recurring bus.
+- **Rationale** — One hook per lifecycle point. `before*` hooks allow payload enrichment (adding metadata, normalizing fields). `after*` hooks allow observability (logging, analytics) regardless of outcome. Hooks run synchronously in the call chain — `before*` is awaited before transport, `after*` is awaited before returning to the caller.
+- **Tradeoffs** — Hook errors propagate to the caller, which means a broken hook breaks the payment call. This is intentional: silent hook failures would create hard-to-debug divergence between what the hook logged and what actually happened.
+
 ## Operations
 
 The SDK exposes eight operations and one utility:
@@ -322,6 +330,23 @@ type WebhookEventType =
 
 type Currency = "USD" | "EUR" | "GBP" | "KES" | "UGX" | "TZS" | "RWF";
 
+type SdkHooks = {
+  beforeCollect?: (
+    input: CollectPaymentInput,
+  ) => CollectPaymentInput | void | Promise<CollectPaymentInput | void>;
+  afterCollect?: (
+    result: Result<{ reference: string; status: string }, string>,
+    input: CollectPaymentInput,
+  ) => void | Promise<void>;
+  beforePayout?: (
+    input: MakePayoutInput,
+  ) => MakePayoutInput | void | Promise<MakePayoutInput | void>;
+  afterPayout?: (
+    result: Result<{ reference: string; status: string }, string>,
+    input: MakePayoutInput,
+  ) => void | Promise<void>;
+};
+
 type NylonPayConfig = {
   apiKey: string;
   apiSecret: string;
@@ -331,6 +356,7 @@ type NylonPayConfig = {
   maxPollIntervalMs?: number;
   maxPollDurationMs?: number;
   maxPollAttempts?: number;
+  hooks?: SdkHooks;
 };
 
 type Customer = {
@@ -696,6 +722,8 @@ No SDK adds operations, parameters, events, or behavior beyond what this spec de
 9. The PaymentInstance `reference` property is immutable after creation. It cannot be reassigned or mutated.
 10. Handler errors in the pubsub system are caught and do not propagate to other handlers or the polling loop.
 11. All public types, functions, and constants are documented. No undocumented public surface exists.
+12. `before*` hooks run after input validation and before the transport call. They cannot bypass validation. `after*` hooks run after the transport call, regardless of success or failure. Both are awaited synchronously in the call chain.
+13. A `before*` hook that returns `null` or `void` leaves the payload unchanged. Only a non-null return value replaces the input. Hook errors propagate to the caller — they are not caught or swallowed by the SDK.
 
 ## Prohibitions
 
@@ -707,6 +735,7 @@ No SDK adds operations, parameters, events, or behavior beyond what this spec de
 6. The SDK never exposes the fingerprint generation algorithm as a public API. It is an internal transport concern.
 7. The SDK never modifies merchant-supplied metadata. It passes through to the server and back unchanged.
 8. The SDK never throws on runtime/operational errors (network failures, provider rejections, timeouts). These are returned as error results. Only programmer errors (invalid config, missing required fields) throw.
+9. Hooks never receive or expose API secrets, raw provider payloads, or internal transport state. The `before*` and `after*` hook signatures are bounded to the merchant-facing input and a normalized result — nothing more.
 
 ## Follow-Up Work
 
