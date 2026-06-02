@@ -278,7 +278,7 @@ Every async operation returns a PaymentInstance with this interface:
 - `on(event, handler)` — register a handler for an event. Returns the instance (chainable).
 - `once(event, handler)` — register a handler that fires at most once. Returns the instance.
 - `off(event, handler)` — remove a handler. Returns the instance.
-- `wait()` — blocks until a terminal state. Resolves/returns the transaction on success. Rejects/errors on failure, cancellation, or timeout.
+- `wait()` — blocks until a terminal state. Resolves with the full transaction on success, or `null` on failure, cancellation, or timeout. Never rejects.
 
 **Events:**
 - `processing` — provider acknowledged, transaction in progress
@@ -720,7 +720,7 @@ Every SDK must ship an integration test suite that runs against a real sandbox b
 **Environment:**
 
 - Tests require valid sandbox credentials (`apiKey` with `npk_test_` prefix, matching `apiSecret`).
-- Tests run in sandbox/test mode — no real money moves, sandbox provider resolves immediately.
+- Tests run in sandbox/test mode — no real money moves, sandbox provider returns `"pending"` immediately then transitions through `"processing"` to terminal during polling (2–8 s total).
 - A `NYLONPAY_TEST_MODE` environment variable (or language equivalent) gates tests that require live-only behavior (e.g., revoked key detection). These tests are skipped when the variable is not set to `live`.
 - Each test creates a fresh SDK instance with singleton bypass (`force: true` or equivalent) to prevent state leakage between test suites.
 
