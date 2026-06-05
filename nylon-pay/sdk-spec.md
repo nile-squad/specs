@@ -633,7 +633,7 @@ does not move real money; a live key processes real transactions. The SDK has no
 
 | Field | Default |
 |-------|---------|
-| `baseUrl` | `https://api.nylonpay.io/api/services` |
+| `baseUrl` | `https://api.nylonpay.nilesquad.com/api/services` |
 | `timeoutMs` | `30000` |
 | `maxRetries` | `3` |
 | `maxPollIntervalMs` | `2000` |
