@@ -26,7 +26,7 @@ All SDKs are server-side. Client-side packages (browser, mobile) are a future sc
 
 5. **Async operations return a PaymentInstance.** Long-running operations (collections, payouts) return an event-driven instance with pubsub (`on`/`once`/`off`) and a blocking resolver (`wait`). The instance owns its polling lifecycle and stops on terminal states.
 
-6. **Fail loudly on misconfiguration, gracefully on runtime errors.** A missing or malformed API key/secret throws at initialization. Network failures, timeouts, and provider rejections return error results. The boundary is: programmer error vs. operational failure.
+6. **Fail loudly on misconfiguration, gracefully on runtime errors.** A missing or malformed API key/secret throws at initialization. Async initiation failures (`collectPayment`/`makePayout` rejected before a transaction exists — invalid key, bad signature, scope/limit/provider reject) also throw, carrying a structured `category`. Sync and blocking operations return error results. The boundary is: there is no transaction to observe yet → throw; otherwise → result. See [D13](#d13-async-initiation-failures-throw).
 
 7. **Idempotency is automatic but overridable.** Every payment operation generates a unique idempotency key by default. Merchants supply their own for retry-safe operations. The SDK never sends the same key twice unintentionally.
 
@@ -123,6 +123,22 @@ All SDKs are server-side. Client-side packages (browser, mobile) are a future sc
 - **Alternatives considered** — (a) Rely on unit tests only. Rejected: mocked transport cannot catch wire-format bugs, header mismatches, or server-side validation changes. (b) Let each SDK define its own integration tests. Rejected: without a canonical list, coverage drifts across languages — one SDK tests idempotency, another doesn't, and regressions go unnoticed until production.
 - **Rationale** — A spec'd integration test suite ensures cross-language parity. Every SDK, regardless of language, proves the same behaviors against the same backend. The suite is small (focused on contract verification, not exhaustive coverage) and runs in CI against a sandbox environment.
 - **Tradeoffs** — Integration tests are slower and require network access + valid sandbox credentials. They cannot run in offline CI environments. Mitigated by keeping the suite small (<20 tests) and providing a skip mechanism for environments without backend access.
+
+### D12: Errors are categorized, not status-coded
+
+- **Decision** — Every error carries a machine-readable `category` from a fixed taxonomy (`auth`, `validation`, `limit`, `rate_limit`, `account`, `provider`, `not_found`, `internal`, `network`, `timeout`). HTTP is binary — `200` for success, `400` for every failure. The SDK never branches on HTTP status codes, and never classifies errors by matching message text.
+- **Context** — The backend framework returns `400` for all failures and discards the response `data` field on errors, so neither the HTTP status nor a structured error body can carry meaning. Earlier the SDK inferred error kind from message substrings, which silently misclassified errors — e.g. the auth message `"API key was not found"` collided with transaction-not-found handling, so an invalid key surfaced as a polling timeout.
+- **Alternatives considered** — (a) Distinct HTTP status codes (401/403/422). Rejected: the framework cannot emit them cleanly, and SDKs would then depend on transport status. (b) A structured error object in `data`. Rejected: the framework drops `data` on failures. (c) Substring matching on the message. Rejected: fragile and the source of the original bug.
+- **Rationale** — The backend tags each error with ` -- error-type: <category>` appended to the message (the only channel that survives), and the SDK parses the suffix into a structured `SdkError { category, message }`. Stable, explicit, language-agnostic.
+- **Tradeoffs** — The category rides in the message string rather than a dedicated field. Acceptable given framework constraints; the suffix format is fixed and tested on both sides.
+
+### D13: Async initiation failures throw
+
+- **Decision** — `collectPayment` and `makePayout` throw a categorized error when the transaction fails to start (invalid key, bad signature, scope/limit rejection, provider reject at initiation). They return a PaymentInstance only once the transaction is actually accepted. The blocking `*AndResolve`, `getStatus`, `getTransaction`, `verifyPhone`, and `createInvoice` operations return an error result (not a throw).
+- **Context** — A PaymentInstance models a transaction that exists and is being polled. When initiation fails, there is no transaction to poll. Previously these failures were forced into a fabricated instance and emitted as an `error` event, where they were easily missed (no handler attached yet, or `wait()` resolving `null` with no reason) — the SDK could "exit with no error."
+- **Alternatives considered** — (a) Always return a PaymentInstance and emit `error`. Rejected: buries fatal misconfiguration in an event channel; the merchant may never see it. (b) Return a `Result` from the async ops. Rejected: breaks the PaymentInstance contract for the common success path.
+- **Rationale** — Initiation failure is a programmer/operational error that should surface loudly and immediately at the call site (`try/catch`), consistent with Principle 6. The thrown error carries `category` and `message` so the merchant can branch.
+- **Tradeoffs** — Slightly diverges from a pure "async ops always return PaymentInstance" reading. The merchant must wrap initiation in `try/catch`. This is the correct trade: a thrown invalid-key error is far better than a silent one.
 
 ## Operations
 
@@ -574,6 +590,16 @@ Every server response has this shape:
 
 The SDK normalizes this to a result type: on success, returns the `data` payload. On failure, returns an error derived from `message`.
 
+**HTTP is binary.** The backend returns HTTP `200` for success (`status: true`) and HTTP `400` for every failure (`status: false`) — regardless of cause. The SDK MUST NOT branch on HTTP status codes to classify errors. Provider/transport-level failures the backend never produced (network errors, request timeouts, gateway 5xx) are surfaced by the SDK's transport with the `network`/`timeout`/`internal` categories.
+
+**Error categories.** Every server failure carries a machine-readable category so merchants branch on a stable value instead of parsing prose. Because the framework discards the response `data` on failures and only the `message` survives, the category travels as a suffix on the message:
+
+```
+<human-readable message> -- error-type: <category>
+```
+
+The SDK splits the suffix off, exposing `category` and the clean `message` on the structured `SdkError` (see [Error Categories](#error-categories)). The human portion (including any server log id) is preserved as the message. A message without the suffix is treated as category `internal`.
+
 ### Request Signing
 
 Every request is signed with HMAC-SHA256. The signing protocol:
@@ -610,10 +636,39 @@ The server signs every response to prevent tampering:
 - Retry on HTTP status codes: 408, 429, 500, 502, 503, 504
 - Retry on network errors and request timeouts
 - Do NOT retry on 4xx errors except 408 and 429 (client errors like 400, 401, 403, 404, 422 are returned immediately)
+- Business failures are HTTP `400` and therefore never retried — they are returned (or thrown, for async initiation) immediately with their category
 - Exponential backoff: `2^attempt * 1000 + random(0-500)` ms
 - Max retries: configurable (default 3)
 - Per-request timeout: configurable (default 30s), enforced via AbortController equivalent
 - On retry, the same idempotency key is reused — the SDK must not generate a new nonce/key per retry attempt
+
+## Error Categories
+
+Every SDK error is a structured `SdkError`:
+
+```typescript
+type SdkErrorCategory =
+  | "auth"        // invalid/missing/revoked/expired key, bad signature, replay, scope
+  | "validation"  // input the server rejected
+  | "limit"       // account/KYC transaction limits exceeded
+  | "rate_limit"  // too many requests
+  | "account"     // merchant account missing or not active
+  | "provider"    // payment provider/engine rejected the operation
+  | "not_found"   // referenced transaction does not exist
+  | "internal"    // unexpected server-side failure
+  | "network"     // request never reached the server (DNS, TLS, connection)
+  | "timeout";    // request exceeded the configured timeout
+
+type SdkError = {
+  category: SdkErrorCategory;
+  message: string;
+  retryable?: boolean;
+};
+```
+
+- `auth`, `validation`, `limit`, `rate_limit`, `account`, `provider`, `not_found`, `internal` are server-tagged via the message suffix.
+- `network`, `timeout` are produced by the SDK transport when the request never completed.
+- Merchants branch on `category`, never on `message` text or HTTP status.
 
 ## Configuration
 
@@ -742,7 +797,7 @@ Every SDK must ship an integration test suite that runs against a real sandbox b
 | I12 | Singleton behavior | `createNylonPay` × 2 | Second call without `force` returns the same instance |
 | I13 | Unknown reference | `getTransaction` | Returns error for a reference that doesn't exist |
 | I14 | Sub-minimum amount | `collectPayment` | Server rejects amounts below 500 with a validation error |
-| I15 | Revoked key (live-only) | `collectPayment` | Server returns 401 for a revoked API key. Skipped unless `NYLONPAY_TEST_MODE=live` |
+| I15 | Revoked key (live-only) | `collectPayment` | Server rejects a revoked API key — `collectPayment` throws an error with category `auth` (HTTP 400, not 401). Skipped unless `NYLONPAY_TEST_MODE=live` |
 
 **Test isolation rules:**
 
@@ -777,6 +832,9 @@ No SDK adds operations, parameters, events, or behavior beyond what this spec de
 13. A `before*` hook that returns `null` or `void` leaves the payload unchanged. Only a non-null return value replaces the input. Hook errors propagate to the caller — they are not caught or swallowed by the SDK.
 14. Integration tests run against a real sandbox backend, not mocked transport. Every SDK implementation covers the same canonical test set (I1–I15) with spec IDs traceable from this document to the test code.
 15. Integration tests are isolated: each test uses a unique reference, does not depend on execution order, and does not assert on non-deterministic server timing.
+16. Every error exposes a `category` from the fixed taxonomy. The SDK never classifies errors by HTTP status code or by matching message text.
+17. `collectPayment` and `makePayout` throw a categorized error on initiation failure; they return a PaymentInstance only after the transaction is accepted. A PaymentInstance is never constructed to carry an initiation error.
+18. The blocking resolve variants return the full `Transaction` shape — the same fields as `getTransaction` — including `failureReason` and `metadata`. They never return a partial stub.
 
 ## Prohibitions
 
@@ -815,3 +873,10 @@ No SDK adds operations, parameters, events, or behavior beyond what this spec de
 - **What** — The SDK does not send its version in request headers for server-side compatibility checks.
 - **Why it's deferred** — No server-side version negotiation exists. All SDK versions target the same API contract.
 - **Impact of deferring** — Breaking API changes require coordinated SDK updates. Mitigated by semantic versioning and changelog communication.
+
+### F5: Server-sent events for status updates (SSE), with polling fallback
+
+- **What** — The PaymentInstance currently learns about status transitions by polling `getStatus` on an interval. The intended evolution is for the SDK to subscribe to a server-push stream (SSE) for a transaction's status events, and fall back to polling when the stream is unavailable (no SSE endpoint, proxy buffering, connection drop).
+- **Why it's deferred** — Requires a server-side SSE endpoint that streams a single transaction's lifecycle events, plus per-language SSE client support and reconnection/backoff semantics. The PaymentInstance event surface (`processing`/`success`/`failed`/`cancelled`/`error`) and terminal-stop guarantees stay identical — only the transport for status updates changes.
+- **Impact of deferring** — Status updates remain poll-based: correct but higher latency and more requests than a push stream. The webhook catalog remains the authoritative server-push channel in the meantime.
+- **Design notes (when implemented)** — SSE is the primary source; polling is the documented fallback (not removed). Reconnection uses jittered backoff. A stream that emits a terminal event stops the instance exactly as polling does. This spec updates first (a new decision record + transport section) before any implementation, per Principle 10.
