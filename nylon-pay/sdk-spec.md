@@ -296,7 +296,7 @@ Every async operation returns a PaymentInstance with this interface:
 
 **Properties:**
 - `reference` — the transaction reference (read-only)
-- `status` — current transaction status, null until first poll resolves (read-only)
+- `status` — current transaction status, set from the initiation response (typically `"pending"`) and updated with each status change (read-only)
 
 **Methods:**
 - `on(event, handler)` — register a handler for an event. Returns the instance (chainable).
@@ -310,6 +310,17 @@ Every async operation returns a PaymentInstance with this interface:
 - `failed` — transaction failed (terminal, polling stops)
 - `cancelled` — transaction cancelled (terminal, polling stops)
 - `error` — non-transaction error: network failure, reference mismatch, polling timeout (terminal, polling stops)
+
+```typescript
+type EventData = {
+  event: PaymentEvent;          // which event fired
+  transaction?: Transaction;    // full transaction on status-change events
+  error?: string;               // error message on the "error" event
+  timestamp: string;           // ISO 8601 timestamp of when the event was emitted
+};
+
+type PaymentEventHandler = (data: EventData) => void;
+```
 
 **Status updates:**
 - By default the instance subscribes to an SSE stream (see [Status Streaming](#status-streaming-sse)); it falls back to polling `getStatus` when streaming is disabled or unavailable. Either transport drives the same handler, so the behavior below holds regardless of source.
@@ -390,6 +401,10 @@ type NylonPayConfig = {
   maxPollDurationMs?: number;
   maxPollAttempts?: number;
   streaming?: boolean; // default true — SSE status updates with polling fallback
+  /** Custom fetch implementation. Defaults to `globalThis.fetch`. Essential for edge runtimes and testing. */
+  fetch?: typeof globalThis.fetch;
+  /** Force a new instance even if one already exists for this key+url pair. Defaults to `false`. See D11. */
+  force?: boolean;
   hooks?: SdkHooks;
 };
 
@@ -547,7 +562,9 @@ The Nylon Pay backend uses Nile.js action-based routing. All SDK requests target
 
 ### Endpoint
 
-All requests are `POST` to `{baseUrl}/services`.
+All requests are `POST` to `{baseUrl}`.
+
+The default `baseUrl` is `https://api.nylonpay.nilesquad.com/api/services` — a single URL that includes both the origin and the path. The SDK appends no further path segments; the body identifies the service and action.
 
 There are no RESTful routes, no query parameters, no HTTP method variety. Every operation — regardless of type — hits the same endpoint with a different JSON body.
 
