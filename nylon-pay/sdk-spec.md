@@ -132,13 +132,13 @@ All SDKs are server-side. Client-side packages (browser, mobile) are a future sc
 - **Rationale** — The backend tags each error with ` -- error-type: <category>` appended to the message (the only channel that survives), and the SDK parses the suffix into a structured `SdkError { category, message }`. Stable, explicit, language-agnostic.
 - **Tradeoffs** — The category rides in the message string rather than a dedicated field. Acceptable given framework constraints; the suffix format is fixed and tested on both sides.
 
-### D13: Async initiation failures throw
+### D13: Server-side initiation failures emit error event
 
-- **Decision** — `collectPayment` and `makePayout` throw a categorized error when the transaction fails to start (invalid key, bad signature, scope/limit rejection, provider reject at initiation). They return a PaymentInstance only once the transaction is actually accepted. The blocking `*AndResolve`, `getStatus`, `getTransaction`, `verifyPhone`, and `createInvoice` operations return an error result (not a throw).
-- **Context** — A PaymentInstance models a transaction that exists and is being polled. When initiation fails, there is no transaction to poll. Previously these failures were forced into a fabricated instance and emitted as an `error` event, where they were easily missed (no handler attached yet, or `wait()` resolving `null` with no reason) — the SDK could "exit with no error."
-- **Alternatives considered** — (a) Always return a PaymentInstance and emit `error`. Rejected: buries fatal misconfiguration in an event channel; the merchant may never see it. (b) Return a `Result` from the async ops. Rejected: breaks the PaymentInstance contract for the common success path.
-- **Rationale** — Initiation failure is a programmer/operational error that should surface loudly and immediately at the call site (`try/catch`), consistent with Principle 6. The thrown error carries `category` and `message` so the merchant can branch.
-- **Tradeoffs** — Slightly diverges from a pure "async ops always return PaymentInstance" reading. The merchant must wrap initiation in `try/catch`. This is the correct trade: a thrown invalid-key error is far better than a silent one.
+- **Decision** — `collectPayment` and `makePayout` return a `PaymentInstance` that emits an `"error"` event when the transaction fails to start on the server (invalid key, bad signature, scope/limit rejection, provider rejection, network error, timeout). The transaction never started, so there is nothing to poll. Only client-side validation errors (zero amount, empty required fields, invalid items, missing bank details) throw synchronously.
+- **Context** — A PaymentInstance models a transaction that exists and is being polled. When initiation fails on the server, there is no transaction to poll. Previously these failures were thrown, which forced merchants to wrap every call in `try/catch` and made it easy to miss errors if the handler wasn't attached yet. The error event carries `category` and `retryable` so the merchant can branch programmatically.
+- **Alternatives considered** — (a) Throw on all initiation failures. Rejected: buries server-side failures in exceptions; the merchant may never see them if not caught. (b) Return a `Result` from the async ops. Rejected: breaks the PaymentInstance contract for the common success path.
+- **Rationale** — Server-side initiation failure is an operational error that should surface through the event channel with structured metadata (`category`, `retryable`). Client-side validation errors (programmer mistakes) throw immediately. This separates concerns: `try/catch` for bugs, event handlers for operational failures.
+- **Tradeoffs** — The merchant must attach an `"error"` handler to catch server-side initiation failures. This is the correct trade: an unhandled event is visible in logs; an unhandled exception crashes the process.
 
 ### D14: Status updates stream over SSE, with polling fallback
 
@@ -309,17 +309,17 @@ Every async operation returns a PaymentInstance with this interface:
 - `success` — transaction completed successfully (terminal, polling stops)
 - `failed` — transaction failed (terminal, polling stops)
 - `cancelled` — transaction cancelled (terminal, polling stops)
-- `error` — non-transaction error: network failure, reference mismatch, polling timeout (terminal, polling stops)
+- `error` — server-side initiation failure (auth, limit, provider, network, timeout) or lifecycle error (network failure, reference mismatch, polling timeout). Transaction never started. (terminal, polling stops)
 
 ```typescript
 type EventData = {
   event: PaymentEvent;          // which event fired
   transaction?: Transaction;    // full transaction on status-change events
   error?: string;               // error message on the "error" event
+  category?: SdkErrorCategory;  // machine-readable error category on "error" event
+  retryable?: boolean;          // whether re-invoking may succeed, on "error" event
   timestamp: string;           // ISO 8601 timestamp of when the event was emitted
 };
-
-type PaymentEventHandler = (data: EventData) => void;
 ```
 
 **Status updates:**
@@ -888,7 +888,7 @@ No SDK adds operations, parameters, events, or behavior beyond what this spec de
 14. Integration tests run against a real sandbox backend, not mocked transport. Every SDK implementation covers the same canonical test set (I1–I20) with spec IDs traceable from this document to the test code.
 15. Integration tests are isolated: each test uses a unique reference, does not depend on execution order, and does not assert on non-deterministic server timing.
 16. Every error exposes a `category` from the fixed taxonomy. The SDK never classifies errors by HTTP status code or by matching message text.
-17. `collectPayment` and `makePayout` throw a categorized error on initiation failure; they return a PaymentInstance only after the transaction is accepted. A PaymentInstance is never constructed to carry an initiation error.
+17. `collectPayment` and `makePayout` return a PaymentInstance that emits an `"error"` event on server-side initiation failure (auth, limit, provider, network, timeout). Only client-side validation errors (zero amount, empty fields, invalid items) throw synchronously. A PaymentInstance may be constructed to carry an initiation error via the `initialError` mechanism.
 18. The blocking resolve variants return the full `Transaction` shape — the same fields as `getTransaction` — including `failureReason` and `metadata`. They never return a partial stub.
 19. SSE status streaming and polling are interchangeable beneath the PaymentInstance contract: both deliver the same status shape, drive the same events, and honor the same terminal-stop and cap guarantees. A stream failure falls back to polling without changing observable behavior. Streaming never removes polling.
 
