@@ -794,7 +794,7 @@ Every SDK must ship a test suite covering:
 - PaymentInstance lifecycle (events, polling, terminal states, timeout, reference mismatch)
 - Retry behavior (retryable status codes, non-retryable status codes, backoff timing)
 - Webhook signature verification (valid, invalid, tampered)
-- The canonical Security Test suite (S1–S13, see §Security Tests) — required, not optional
+- The canonical Security Test suite (S1–S14, see §Security Tests) — required, not optional
 
 ### Edge Case Testing
 
@@ -848,7 +848,7 @@ Every SDK must test the following edge cases:
 
 ### Security Tests
 
-Every SDK implementation **MUST** ship a dedicated security test suite covering the canonical cases below. These are the cross-language contract for the SDK's cryptographic surface; IDs (S1–S13) are traceable from this document to each SDK's test code. They run with mocked transport — no network required.
+Every SDK implementation **MUST** ship a dedicated security test suite covering the canonical cases below. These are the cross-language contract for the SDK's cryptographic surface; IDs (S1–S14) are traceable from this document to each SDK's test code. They run with mocked transport — no network required.
 
 | ID  | Requirement |
 |-----|-------------|
@@ -865,6 +865,7 @@ Every SDK implementation **MUST** ship a dedicated security test suite covering 
 | S11 | The transport **rejects a success response whose signature is invalid**, and accepts one whose signature is valid. |
 | S12 | Config construction rejects an `apiKey` without the `npk_` prefix and an `apiSecret` without the `nps_` prefix. |
 | S13 | The API secret never appears on the SDK's public/serialized surface, and the instance cache is secret-aware (rotating the secret yields a different instance — it is never reused under a stale secret). |
+| S14 | The SSE read buffer is bounded. A stream that delivers data without a frame separator does not grow memory without limit — once the buffer exceeds the cap, the stream is closed and an error is surfaced (the instance then falls back to polling). |
 
 ### Integration Tests
 
@@ -940,7 +941,9 @@ No SDK adds operations, parameters, events, or behavior beyond what this spec de
 18. The blocking resolve variants return the full `Transaction` shape — the same fields as `getTransaction` — including `failureReason` and `metadata`. They never return a partial stub.
 19. SSE status streaming and polling are interchangeable beneath the PaymentInstance contract: both deliver the same status shape, drive the same events, and honor the same terminal-stop and cap guarantees. A stream failure falls back to polling without changing observable behavior. Streaming never removes polling.
 20. Response verification is fail-closed (D15): an authenticated success response without a valid `_responseSignature` is rejected as an `internal` error and its data is never returned. The SDK never exposes unverified response data.
-21. Every SDK ships the canonical Security Test suite (S1–S13) with spec IDs traceable from this document to the test code. All signature comparisons use a constant-time, length-guarded primitive.
+21. Every SDK ships the canonical Security Test suite (S1–S14) with spec IDs traceable from this document to the test code. All signature comparisons use a constant-time, length-guarded primitive.
+22. A PaymentInstance emits at most one terminal event and fires no events after it resolves (terminal state, error, or timeout). Late updates from either transport — a buffered stream frame delivered after fallback, or an in-flight poll — are ignored once resolved.
+23. The SSE read buffer is bounded: a stream that never delivers a frame separator cannot grow client memory without limit; exceeding the cap closes the stream and surfaces an error, after which the instance falls back to polling.
 
 ## Prohibitions
 
