@@ -110,11 +110,12 @@ All SDKs are server-side. Client-side packages (browser, mobile) are a future sc
 
 ### D10: Lifecycle hooks for cross-cutting concerns
 
-- **Decision** — The SDK exposes optional `beforeCollect`, `afterCollect`, `beforePayout`, and `afterPayout` hooks registered once at initialization via `NylonPayConfig.hooks`.
+- **Decision** — The SDK exposes optional `beforeCollect`, `afterCollect`, `beforePayout`, and `afterPayout` hooks registered once at initialization via `NylonPayConfig.hooks`. Each hook is a wrapper object `{ enabled?, fn, onError }` (see `SdkHook<Fn>`): `fn` is the handler, `onError` is **required**, and `enabled` (default true) toggles the hook off without removing its config.
 - **Context** — Merchants need to intercept payment calls for logging, analytics, metadata enrichment, and audit trails without wrapping every SDK call in their own middleware. Before we had hooks, merchants had to wrap every `collectPayment` call manually — leading to duplicated logic and missed edge cases (e.g., the error path not being instrumented).
-- **Alternatives considered** — (a) Middleware stack (array of functions applied in sequence). Rejected: unnecessary complexity when a single hook per event is sufficient; arrays imply ordering and composition semantics that create confusion. (b) Event emitter on the SDK instance. Rejected: event emitters are appropriate for repeated events, not single-shot lifecycle points; `afterCollect` fires exactly once per call, not on a recurring bus.
-- **Rationale** — One hook per lifecycle point. `before*` hooks allow payload enrichment (adding metadata, normalizing fields). `after*` hooks allow observability (logging, analytics) regardless of outcome. Hooks run synchronously in the call chain — `before*` is awaited before transport, `after*` is awaited before returning to the caller.
-- **Tradeoffs** — Hook errors propagate to the caller, which means a broken hook breaks the payment call. This is intentional: silent hook failures would create hard-to-debug divergence between what the hook logged and what actually happened.
+- **Alternatives considered** — (a) Middleware stack (array of functions applied in sequence). Rejected: unnecessary complexity when a single hook per event is sufficient; arrays imply ordering and composition semantics that create confusion. (b) Event emitter on the SDK instance. Rejected: event emitters are appropriate for repeated events, not single-shot lifecycle points; `afterCollect` fires exactly once per call, not on a recurring bus. (c) Bare hook functions whose errors propagate to the caller (the original v1.0.x design). Rejected: see Update below — a broken hook crashing the payment call, or being silently `catch`-swallowed, are both unacceptable in a payments SDK.
+- **Rationale** — One hook per lifecycle point. `before*` hooks allow payload enrichment (adding metadata, normalizing fields). `after*` hooks allow observability (logging, analytics) regardless of outcome. Hooks run synchronously in the call chain — `before*` is awaited before transport, `after*` is awaited before returning to the caller. The SDK runs `fn` inside a safe boundary; a throw or rejection is routed to the hook's `onError` and never bubbles into the payment flow. `onError` itself is wrapped too, so a faulty handler cannot crash the SDK.
+- **Tradeoffs** — Requiring `onError` is mild boilerplate, but it forces the merchant to make an explicit, type-checked decision about hook failure. This is the deliberate middle ground between the two bad options: errors no longer crash the payment call (the old "propagate to caller" behaviour), and they are never silently swallowed (a `catch {}` would hide a failed wallet-credit/fulfillment side-effect behind a "successful" payment).
+- **Update (v1.0.8)** — Reshaped bare hook functions into `SdkHook<Fn>` wrappers with a required `onError` and internal error containment (the implementation runs `fn` inside its language's safe-call/try equivalent). Breaking change to the `hooks` config shape; bumped per the changelog. Supersedes the original "hook errors propagate to the caller" tradeoff.
 
 ### D11: Integration tests are spec'd separately from unit tests
 
@@ -147,6 +148,14 @@ All SDKs are server-side. Client-side packages (browser, mobile) are a future sc
 - **Alternatives considered** — (a) Replace polling with SSE entirely. Rejected: proxies/buffering and restricted networks can break streaming; a fallback is mandatory. (b) WebSockets. Rejected: heavier than needed for one-directional status push; SSE over plain HTTP is simpler and proxy-friendlier. (c) Client keeps polling, server adds webhooks only. Rejected: webhooks are the merchant-server push channel, not a substitute for the PaymentInstance's own updates.
 - **Rationale** — The stream delivers the **same status shape** a one-shot `getStatus` returns, so the PaymentInstance handles a streamed update identically to a polled one — the transport is swappable beneath an unchanged contract. On stream failure the instance reconnects with jittered backoff, then falls back to polling. v1's server-side source is a read-only status poll inside the stream handler (works for sandbox and live, never touches the money path); a true event-bus push is a transparent future optimization that does not alter the wire format.
 - **Tradeoffs** — Two code paths (stream + poll) instead of one. Justified: the fallback is what makes streaming safe to enable by default. The SDK must ship an SSE client (server-side `fetch` streaming, not browser `EventSource`, so HMAC headers can be set).
+
+### D15: Response verification is fail-closed
+
+- **Decision** — Every authenticated success response MUST carry a valid `_responseSignature`, and the SDK MUST reject the response (return an `internal` error, expose no data) when the signature is **missing** or **invalid**. The SDK never returns response data it has not verified.
+- **Context** — The backend signs every SDK success response (the server either signs the response or fails the action — there is no unsigned success path). An earlier SDK only verified *when a signature was present* and accepted the data when the field was absent. That is fail-open: a man-in-the-middle (or a malicious endpoint) could strip `_responseSignature` and the SDK would surface forged data — a forged `"successful"` status, a forged amount, a forged phone-verification result.
+- **Alternatives considered** — (a) Verify-if-present (the old behaviour). Rejected: trivially bypassed by stripping the field. (b) Make signing optional per-endpoint. Rejected: every SDK action already signs; optionality only reintroduces the hole.
+- **Rationale** — Signature verification only protects integrity if a missing signature is treated as a failure. Fail-closed is the only posture consistent with "the SDK never exposes unverified data." The comparison is constant-time and length-guarded, so malformed signatures are rejected without raising an error.
+- **Tradeoffs** — An SDK pointed at a backend that does not sign responses will reject everything. Acceptable and intended: an unsigned response is indistinguishable from a tampered one. Introduced in v1.0.8.
 
 ## Operations
 
@@ -374,21 +383,39 @@ type WebhookEventType =
 
 type Currency = "USD" | "EUR" | "GBP" | "KES" | "UGX" | "TZS" | "RWF";
 
+// Every hook is wrapped: `fn` is the handler, `onError` (required) receives any
+// throw/rejection from `fn`, and `enabled` (default true) toggles it off.
+// The SDK runs `fn` inside a safe boundary so merchant code can never crash the
+// payment flow — failures route to `onError` instead of bubbling.
+type SdkHook<Fn> = {
+  enabled?: boolean; // default true
+  fn: Fn;
+  onError: (error: unknown) => void | Promise<void>;
+};
+
 type SdkHooks = {
-  beforeCollect?: (
-    input: CollectPaymentInput,
-  ) => CollectPaymentInput | void | Promise<CollectPaymentInput | void>;
-  afterCollect?: (
-    result: Result<{ reference: string; status: string }, string>,
-    input: CollectPaymentInput,
-  ) => void | Promise<void>;
-  beforePayout?: (
-    input: MakePayoutInput,
-  ) => MakePayoutInput | void | Promise<MakePayoutInput | void>;
-  afterPayout?: (
-    result: Result<{ reference: string; status: string }, string>,
-    input: MakePayoutInput,
-  ) => void | Promise<void>;
+  beforeCollect?: SdkHook<
+    (
+      input: CollectPaymentInput,
+    ) => CollectPaymentInput | void | Promise<CollectPaymentInput | void>
+  >;
+  afterCollect?: SdkHook<
+    (
+      result: Result<{ reference: string; status: string }, string>,
+      input: CollectPaymentInput,
+    ) => void | Promise<void>
+  >;
+  beforePayout?: SdkHook<
+    (
+      input: MakePayoutInput,
+    ) => MakePayoutInput | void | Promise<MakePayoutInput | void>
+  >;
+  afterPayout?: SdkHook<
+    (
+      result: Result<{ reference: string; status: string }, string>,
+      input: MakePayoutInput,
+    ) => void | Promise<void>
+  >;
 };
 
 type NylonPayConfig = {
@@ -403,7 +430,7 @@ type NylonPayConfig = {
   streaming?: boolean; // default true — SSE status updates with polling fallback
   /** Custom fetch implementation. Defaults to `globalThis.fetch`. Essential for edge runtimes and testing. */
   fetch?: typeof globalThis.fetch;
-  /** Force a new instance even if one already exists for this key+url pair. Defaults to `false`. See D11. */
+  /** Force a new instance even if one already exists for this key+secret+url. Defaults to `false`. See D11. */
   force?: boolean;
   hooks?: SdkHooks;
 };
@@ -767,6 +794,7 @@ Every SDK must ship a test suite covering:
 - PaymentInstance lifecycle (events, polling, terminal states, timeout, reference mismatch)
 - Retry behavior (retryable status codes, non-retryable status codes, backoff timing)
 - Webhook signature verification (valid, invalid, tampered)
+- The canonical Security Test suite (S1–S13, see §Security Tests) — required, not optional
 
 ### Edge Case Testing
 
@@ -817,6 +845,26 @@ Every SDK must test the following edge cases:
 - Two calls with the same merchant-supplied `reference`
 - Auto-generated references are unique across rapid sequential calls
 - Retry after 500 uses the same idempotency key (not a new one)
+
+### Security Tests
+
+Every SDK implementation **MUST** ship a dedicated security test suite covering the canonical cases below. These are the cross-language contract for the SDK's cryptographic surface; IDs (S1–S13) are traceable from this document to each SDK's test code. They run with mocked transport — no network required.
+
+| ID  | Requirement |
+|-----|-------------|
+| S1  | The request signature is deterministic for identical inputs and changes if **any** of payload, secret, nonce, or timestamp changes. It is a 64-char hex digest. A signature cannot be reproduced without the secret. |
+| S2  | The canonical payload is **object-key-order independent** (top-level and nested) but **array-order significant**. Two payloads differing only in key insertion order produce the same signature. |
+| S3  | Nonces are cryptographically random, 32 hex chars (16 bytes) by default, and unique across many rapid generations. |
+| S4  | The fingerprint is a stable 64-char hex (SHA-256) value within a process. |
+| S5  | Response verification **accepts** a payload with a valid signature. |
+| S6  | Response verification **rejects** a tampered payload, and rejects a signature produced with a different secret. |
+| S7  | Response verification rejects malformed, empty, short, or non-hex signatures **without throwing** (length-guarded constant-time compare), and rejects a one-byte-flipped signature. |
+| S8  | Webhook verification accepts a valid signature over the **raw body**, and rejects a tampered body, a wrong secret, and a malformed signature (without throwing). |
+| S9  | All signature comparisons use a constant-time, length-guarded comparison primitive — never an ordinary string/`==` comparison on the digest. |
+| S10 | The transport **rejects a success response whose signature is missing** (fail-closed, per D15). It must not return the data. |
+| S11 | The transport **rejects a success response whose signature is invalid**, and accepts one whose signature is valid. |
+| S12 | Config construction rejects an `apiKey` without the `npk_` prefix and an `apiSecret` without the `nps_` prefix. |
+| S13 | The API secret never appears on the SDK's public/serialized surface, and the instance cache is secret-aware (rotating the secret yields a different instance — it is never reused under a stale secret). |
 
 ### Integration Tests
 
@@ -883,14 +931,16 @@ No SDK adds operations, parameters, events, or behavior beyond what this spec de
 9. The PaymentInstance `reference` property is immutable after creation. It cannot be reassigned or mutated.
 10. Handler errors in the pubsub system are caught and do not propagate to other handlers or the polling loop.
 11. All public types, functions, and constants are documented. No undocumented public surface exists.
-12. `before*` hooks run after input validation and before the transport call. They cannot bypass validation. `after*` hooks run after the transport call, regardless of success or failure. Both are awaited synchronously in the call chain.
-13. A `before*` hook that returns `null` or `void` leaves the payload unchanged. Only a non-null return value replaces the input. Hook errors propagate to the caller — they are not caught or swallowed by the SDK.
+12. `before*` hooks run after input validation and before the transport call. They cannot bypass validation. `after*` hooks run after the transport call, regardless of success or failure. Both are awaited synchronously in the call chain. A hook with `enabled: false` is skipped entirely.
+13. A `before*` hook whose `fn` returns `null` or `void` leaves the payload unchanged; only a non-null return value replaces the input. A hook `fn` that throws or rejects never bubbles into the payment flow — the error is routed to the hook's required `onError`, and the call proceeds (for `before*`, with the original unmutated payload). `onError` is itself contained, so a faulty handler cannot crash the SDK.
 14. Integration tests run against a real sandbox backend, not mocked transport. Every SDK implementation covers the same canonical test set (I1–I20) with spec IDs traceable from this document to the test code.
 15. Integration tests are isolated: each test uses a unique reference, does not depend on execution order, and does not assert on non-deterministic server timing.
 16. Every error exposes a `category` from the fixed taxonomy. The SDK never classifies errors by HTTP status code or by matching message text.
 17. `collectPayment` and `makePayout` return a PaymentInstance that emits an `"error"` event on server-side initiation failure (auth, limit, provider, network, timeout). Only client-side validation errors (zero amount, empty fields, invalid items) throw synchronously. A PaymentInstance may be constructed to carry an initiation error via the `initialError` mechanism.
 18. The blocking resolve variants return the full `Transaction` shape — the same fields as `getTransaction` — including `failureReason` and `metadata`. They never return a partial stub.
 19. SSE status streaming and polling are interchangeable beneath the PaymentInstance contract: both deliver the same status shape, drive the same events, and honor the same terminal-stop and cap guarantees. A stream failure falls back to polling without changing observable behavior. Streaming never removes polling.
+20. Response verification is fail-closed (D15): an authenticated success response without a valid `_responseSignature` is rejected as an `internal` error and its data is never returned. The SDK never exposes unverified response data.
+21. Every SDK ships the canonical Security Test suite (S1–S13) with spec IDs traceable from this document to the test code. All signature comparisons use a constant-time, length-guarded primitive.
 
 ## Prohibitions
 
@@ -935,3 +985,17 @@ No SDK adds operations, parameters, events, or behavior beyond what this spec de
 Implemented as of this spec version. See [D14](#d14-status-updates-stream-over-sse-with-polling-fallback) and [Status Streaming (SSE)](#status-streaming-sse). SSE is the default status-update transport; polling is the automatic fallback and is never removed. The PaymentInstance event surface and terminal-stop guarantees are identical across transports.
 
 Remaining optional optimization (not required for conformance): replace the server's v1 read-only status-poll source with a true event-bus push, transparent to the wire format.
+
+### F6: Webhook signature replay protection
+
+- **What** — `verifyWebhookSignature` authenticates the HMAC over the raw body but has no timestamp/expiry, so a captured webhook verifies forever and can be replayed.
+- **Why it's deferred** — The fix is a coordinated signed-content change across the backend webhook sender and the SDK verifier: the server must sign `${timestamp}.${body}` and emit an `x-nylon-timestamp` header, the verifier must enforce a tolerance window, and webhook invariant #8 (raw bytes) changes. Shipping the verifier change alone would reject every live webhook.
+- **Impact of deferring** — Webhook consumers should treat the transaction status as advisory and confirm against `getStatus`/`getTransaction` (the authoritative pull), and apply their own idempotency on the event before acting.
+- **Proposed rollout** — Dual-sign transition: the server emits both the legacy signature and a timestamped v2 signature for a deprecation window; the verifier prefers v2 and falls back to legacy; the legacy path is dropped once consumers migrate, after which the timestamp becomes mandatory.
+
+### F7: Locale-independent canonical payload sort
+
+- **What** — The canonical payload sorts object keys with a locale-sensitive comparison. When the SDK's runtime and the backend disagree on Unicode collation (e.g. non-ASCII `metadata` keys, or differing locale/collation configurations across runtimes), the same payload canonicalizes differently on each side → signature mismatch on otherwise-valid requests and responses.
+- **Why it's deferred** — The canonical string is the signed content in both directions, so the SDK and backend must change together (or accept both forms during a transition). It is an availability concern, not a forgery risk — an attacker still cannot produce a valid signature without the secret.
+- **Impact of deferring** — Plain lowercase ASCII keys are unaffected (code-point order equals the locale-sensitive order), so typical traffic verifies normally. Divergence is limited to payloads with mixed-case/non-ASCII keys.
+- **Proposed fix** — Sort object keys by Unicode code point (the RFC 8785 / JCS canonicalization rule) identically on both sides, with a dual-verify transition (try code-point order, fall back to the legacy order). Bundle with F6 as a single signing-change rollout. Parity tests must add mixed-case/diacritic/unicode key cases.
