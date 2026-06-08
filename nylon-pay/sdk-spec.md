@@ -157,6 +157,14 @@ All SDKs are server-side. Client-side packages (browser, mobile) are a future sc
 - **Rationale** — Signature verification only protects integrity if a missing signature is treated as a failure. Fail-closed is the only posture consistent with "the SDK never exposes unverified data." The comparison is constant-time and length-guarded, so malformed signatures are rejected without raising an error.
 - **Tradeoffs** — An SDK pointed at a backend that does not sign responses will reject everything. Acceptable and intended: an unsigned response is indistinguishable from a tampered one. Introduced in v1.0.8.
 
+### D16: Webhook verification is replay-protected
+
+- **Decision** — `verifyWebhookSignature` rejects a correctly-signed webhook whose **signed timestamp** is outside a tolerance window (default 300s). Authenticity (HMAC over the raw body) and freshness (signed timestamp within the window) must both hold. The freshness anchor is the timestamp carried **inside the signed body**, read only after the HMAC verifies; an unsigned transport header is never trusted for freshness. A tolerance of `0` disables the check.
+- **Context** — HMAC authenticates *who* sent the webhook, not *when*. Without an expiry, a captured `(body, signature)` pair stays valid forever, so an attacker who records one delivery can replay it indefinitely (re-trigger a fulfilment, re-credit an order). The backend already stamps every delivery — first attempt and every retry — with a current `timestamp` inside the signed body, so the signed content needed for a freshness check is already on the wire.
+- **Alternatives considered** — (a) Leave it to merchants (idempotency on their side). Rejected: replay protection is a property of the verifier; relying on every consumer to dedupe is fail-open by default. (b) Sign `${timestamp}.${body}` and add a header, with a dual-sign migration. Rejected as unnecessary: the timestamp is *already* inside the signed body, so no wire/sender change is required — the fix is verifier-only. (c) Trust the `x-nylon-timestamp` header. Rejected: the header is not covered by the HMAC, so a replay attacker could pair an old body with a fresh header; only the signed-body timestamp is trustworthy.
+- **Rationale** — Reusing the already-signed timestamp makes replay protection a pure verifier change with no coordinated rollout. Because each genuine delivery (including a retry hours later) is re-stamped and re-signed, a 5-minute window never rejects legitimate traffic; only a replayed capture, whose embedded timestamp is now stale, is rejected. Fail-closed on a missing timestamp keeps an unverifiable webhook from being treated as fresh.
+- **Tradeoffs** — Clock skew between the backend and the consumer must stay within the tolerance; the window is configurable for slow consumers, and `0` disables it. A webhook body without a signed timestamp is rejected when the check is on — acceptable, since every Nylon Pay delivery carries one. Introduced in v1.0.8.
+
 ## Operations
 
 The SDK exposes eight operations and one utility:
@@ -290,14 +298,28 @@ The token is a unique identifier for the payment link. Tokens expire after 24 ho
 
 ### verifyWebhookSignature
 
-Standalone utility. Verifies that a webhook payload was signed by Nylon Pay.
+Standalone utility. Verifies that a webhook was genuinely sent by Nylon Pay and
+is not a replay.
 
 Input shape:
 - `payload` — raw request body (string or bytes, depending on language)
-- `signature` — signature from webhook header
+- `signature` — signature from the webhook header
 - `secret` — merchant's webhook secret
+- `toleranceSeconds` — optional replay-protection window (default `300`). Set to
+  `0` to disable the freshness check.
 
-Returns: boolean
+Returns: boolean — `true` only when **both** hold:
+1. **Authenticity** — HMAC-SHA256 over the raw payload bytes equals `signature`.
+2. **Freshness** — the `timestamp` field carried *inside the signed body* is
+   within `toleranceSeconds` of now. Every Nylon Pay delivery (including retries)
+   stamps and signs a current timestamp, so a captured `(body, signature)` pair
+   goes stale and a replay is rejected, while legitimate delayed retries — each
+   freshly stamped — still pass. The timestamp is read from the signed body, not
+   from a header, so it cannot be refreshed without the secret. When
+   `toleranceSeconds > 0` and the signed body carries no parseable timestamp,
+   verification fails closed.
+
+See [D16](#d16-webhook-verification-is-replay-protected).
 
 ## PaymentInstance Contract
 
@@ -779,8 +801,8 @@ Every SDK must ship a test suite covering:
 - Each operation's happy path (mocked transport)
 - PaymentInstance lifecycle (events, polling, terminal states, timeout, reference mismatch)
 - Retry behavior (retryable status codes, non-retryable status codes, backoff timing)
-- Webhook signature verification (valid, invalid, tampered)
-- The canonical Security Test suite (S1–S13, see §Security Tests) — required, not optional
+- Webhook signature verification (valid, invalid, tampered, stale/replayed)
+- The canonical Security Test suite (S1–S14, see §Security Tests) — required, not optional
 
 ### Edge Case Testing
 
@@ -834,7 +856,7 @@ Every SDK must test the following edge cases:
 
 ### Security Tests
 
-Every SDK implementation **MUST** ship a dedicated security test suite covering the canonical cases below. These are the cross-language contract for the SDK's cryptographic surface; IDs (S1–S13) are traceable from this document to each SDK's test code. They run with mocked transport — no network required.
+Every SDK implementation **MUST** ship a dedicated security test suite covering the canonical cases below. These are the cross-language contract for the SDK's cryptographic surface; IDs (S1–S14) are traceable from this document to each SDK's test code. They run with mocked transport — no network required.
 
 | ID  | Requirement |
 |-----|-------------|
@@ -851,6 +873,7 @@ Every SDK implementation **MUST** ship a dedicated security test suite covering 
 | S11 | The transport **rejects a success response whose signature is invalid**, and accepts one whose signature is valid. |
 | S12 | Config construction rejects an `apiKey` without the `npk_` prefix and an `apiSecret` without the `nps_` prefix. |
 | S13 | The API secret never appears on the SDK's public/serialized surface, and the instance cache is secret-aware (rotating the secret yields a different instance — it is never reused under a stale secret). |
+| S14 | Webhook verification is replay-protected: a correctly-signed but **stale** webhook (signed timestamp older than the tolerance window) is **rejected**, a fresh one is accepted, a valid signature carrying **no timestamp fails closed**, and swapping in a fresh timestamp while keeping the captured signature is rejected (the timestamp is signed, so it cannot be refreshed without the secret). |
 
 ### Integration Tests
 
@@ -912,7 +935,7 @@ No SDK adds operations, parameters, events, or behavior beyond what this spec de
 5. The factory validates configuration eagerly. An SDK instance with invalid credentials cannot be constructed.
 6. Auto-generated idempotency keys are unique per invocation. The probability of collision is negligible.
 7. The `_fingerprint` field is injected into every authenticated request body. No authenticated request is sent without it.
-8. Webhook signature verification operates on the raw payload bytes, not parsed JSON. Re-serialization must not alter the signed content.
+8. Webhook signature verification computes the HMAC over the raw payload bytes, not parsed JSON. Re-serialization must not alter the signed content. The freshness check (invariant 23) reads the timestamp from the body only after the HMAC has verified, so it operates on trusted content.
 9. The PaymentInstance `reference` property is immutable after creation. It cannot be reassigned or mutated.
 10. Handler errors in the pubsub system are caught and do not propagate to other handlers or the polling loop.
 11. All public types, functions, and constants are documented. No undocumented public surface exists.
@@ -924,9 +947,10 @@ No SDK adds operations, parameters, events, or behavior beyond what this spec de
 17. `collectPayment` and `makePayout` return a PaymentInstance that emits an `"error"` event on server-side initiation failure (auth, limit, provider, network, timeout). Only client-side validation errors (zero amount, empty fields, invalid items) throw synchronously. A PaymentInstance may be constructed to carry an initiation error via the `initialError` mechanism.
 18. The blocking resolve variants return the full `Transaction` shape — the same fields as `getTransaction` — including `failureReason` and `metadata`. They never return a partial stub.
 19. Response verification is fail-closed (D15): an authenticated success response without a valid `_responseSignature` is rejected as an `internal` error and its data is never returned. The SDK never exposes unverified response data.
-20. Every SDK ships the canonical Security Test suite (S1–S13) with spec IDs traceable from this document to the test code. All signature comparisons use a constant-time, length-guarded primitive.
+20. Every SDK ships the canonical Security Test suite (S1–S14) with spec IDs traceable from this document to the test code. All signature comparisons use a constant-time, length-guarded primitive.
 21. A PaymentInstance emits at most one terminal event and fires no events after it resolves (terminal state, error, or timeout). An in-flight poll that resolves after the instance has resolved is ignored.
 22. The PaymentInstance makes at most one status request in flight at a time, and adds a random jitter to each poll interval so concurrent instances do not synchronise their requests.
+23. Webhook verification is replay-protected (D16): after the HMAC verifies, the timestamp inside the signed body must be within the tolerance window (default 300s) or verification fails. The freshness anchor is the signed timestamp, never an unsigned header, so it cannot be refreshed without the secret. A `0` tolerance disables the check.
 
 ## Prohibitions
 
@@ -972,12 +996,15 @@ No SDK adds operations, parameters, events, or behavior beyond what this spec de
 - **Why it's deferred** — A push transport was prototyped (SSE with a polling fallback) and removed: it required two code paths, a streaming HTTP client able to set auth headers, and a bounded read buffer, all while polling still had to exist as the universal fallback. The added surface did not justify the latency gain for a non-latency-critical path. Revisiting requires a transport that works across restrictive proxies without a mandatory polling fallback, or evidence that latency matters enough to carry both paths.
 - **Impact of deferring** — Status latency is bounded by the poll interval (default 2s) rather than near-real-time. Acceptable: the interval and caps are configurable, and jitter plus single-flight polling bound the load.
 
-### F6: Webhook signature replay protection
+### F6: Webhook signature replay protection — RESOLVED
 
-- **What** — `verifyWebhookSignature` authenticates the HMAC over the raw body but has no timestamp/expiry, so a captured webhook verifies forever and can be replayed.
-- **Why it's deferred** — The fix is a coordinated signed-content change across the backend webhook sender and the SDK verifier: the server must sign `${timestamp}.${body}` and emit an `x-nylon-timestamp` header, the verifier must enforce a tolerance window, and webhook invariant #8 (raw bytes) changes. Shipping the verifier change alone would reject every live webhook.
-- **Impact of deferring** — Webhook consumers should treat the transaction status as advisory and confirm against `getStatus`/`getTransaction` (the authoritative pull), and apply their own idempotency on the event before acting.
-- **Proposed rollout** — Dual-sign transition: the server emits both the legacy signature and a timestamped v2 signature for a deprecation window; the verifier prefers v2 and falls back to legacy; the legacy path is dropped once consumers migrate, after which the timestamp becomes mandatory.
+Resolved in v1.0.8. See [D16](#d16-webhook-verification-is-replay-protected),
+the [verifyWebhookSignature](#verifywebhooksignature) contract, and invariant 23.
+The original concern assumed a coordinated dual-sign rollout, but the backend
+already stamps a current `timestamp` inside the signed body on every delivery and
+retry — so the fix was a verifier-only freshness window (default 300s) with no
+wire or sender change. Consumers should still apply their own idempotency as
+defence in depth, but a captured webhook no longer verifies forever.
 
 ### F7: Locale-independent canonical payload sort
 
