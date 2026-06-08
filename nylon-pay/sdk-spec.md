@@ -165,6 +165,14 @@ All SDKs are server-side. Client-side packages (browser, mobile) are a future sc
 - **Rationale** — Reusing the already-signed timestamp makes replay protection a pure verifier change with no coordinated rollout. Because each genuine delivery (including a retry hours later) is re-stamped and re-signed, a 5-minute window never rejects legitimate traffic; only a replayed capture, whose embedded timestamp is now stale, is rejected. Fail-closed on a missing timestamp keeps an unverifiable webhook from being treated as fresh.
 - **Tradeoffs** — Clock skew between the backend and the consumer must stay within the tolerance; the window is configurable for slow consumers, and `0` disables it. A webhook body without a signed timestamp is rejected when the check is on — acceptable, since every Nylon Pay delivery carries one. Introduced in v1.0.8.
 
+### D17: Canonical payload uses the JSON Canonicalization Scheme (JCS)
+
+- **Decision** — The canonical payload that feeds every signature (requests and responses) is the RFC 8785 (JCS) serialization: object keys sorted by **Unicode code point** (UTF-16 code-unit order) recursively, arrays left in place, numbers in shortest round-tripping form (ECMAScript number-to-string), minimal JSON string escaping, no insignificant whitespace. A locale-sensitive key comparison is prohibited.
+- **Context** — An earlier version sorted keys with a locale-sensitive comparison. That order depends on the runtime's locale and Unicode/ICU data, so two parties — a future non-JS SDK, or the same runtime under a different locale or ICU build — can canonicalize the same payload to different bytes and reject each other's otherwise-valid signatures. It is an availability bug (a valid request/response fails verification), not a forgery risk: an attacker still cannot produce a valid signature without the secret. It is latent while every party shares one collation, and surfaces on keys that order differently under locale vs code point — realistically merchant-supplied `metadata` with mixed-case or non-ASCII keys.
+- **Alternatives considered** — (a) Keep locale sorting, require a fixed locale everywhere. Rejected: unenforceable across languages and deployments, and still breaks on Unicode-version differences. (b) Define an ad-hoc sort. Rejected: JCS is the published, language-neutral standard with reference implementations. (c) Dual-verify transition (accept both old and new canonical forms during migration). Considered but not taken: only divergent-key payloads differ between the two forms, and those are rare, so a clean lockstep switch was chosen over carrying a second code path.
+- **Rationale** — Code-point order is defined by the string itself, not the environment, so it is identical on every runtime. JCS additionally pins number and string serialization, giving a non-JS SDK an unambiguous target instead of "match whatever JavaScript emits." In JavaScript, `JSON.stringify` already produces JCS-conformant numbers and string escaping, so the implementation is the code-point key sort plus that serializer.
+- **Tradeoffs** — Changing the canonical form changes signed content, so the SDK and backend must move together (lockstep). During version skew, an old SDK still signing with the locale order and a new backend disagree **only** on divergent-key payloads; ordinary camelCase/ASCII traffic is byte-identical under both, so the practical break is limited to the payloads that were already at risk. Introduced in v1.0.8.
+
 ## Operations
 
 The SDK exposes eight operations and one utility:
@@ -685,7 +693,20 @@ signatureInput = fingerprint + "." + nonce + "." + timestamp + "." + canonicalPa
 signature = HMAC-SHA256(apiSecret, signatureInput)
 ```
 
-The `canonicalPayload` must use deterministic key sorting so that two identical payloads produce identical signatures regardless of field insertion order.
+The `canonicalPayload` is the **JSON Canonicalization Scheme** (RFC 8785 / JCS)
+serialization of the payload — see [D17](#d17-canonical-payload-uses-the-json-canonicalization-scheme-jcs):
+- Object keys are sorted by **Unicode code point** (UTF-16 code-unit order),
+  recursively, at every level. The sort MUST NOT be locale-sensitive — a
+  collation that depends on the runtime's locale or Unicode data (e.g. a
+  `localeCompare`-style comparison) can order the same keys differently on
+  different runtimes and break verification on valid traffic.
+- Arrays keep their order (never sorted).
+- Numbers use the shortest round-tripping form (ECMAScript number-to-string),
+  strings use minimal JSON escaping, and there is no insignificant whitespace.
+
+This makes the canonical string identical across languages and locales, so two
+identical payloads produce identical signatures regardless of field insertion
+order or where they were serialized.
 
 **Request headers:**
 - `x-nylon-key` — API key (plaintext, starts with `npk_`)
@@ -831,6 +852,7 @@ Every SDK must test the following edge cases:
 **Signing and security:**
 - Canonical payload with nested objects and arrays (deterministic ordering)
 - Canonical payload with unicode characters in values
+- Canonical payload with keys that order differently under locale vs code point (mixed-case, leading underscore, diacritic, CJK, non-BMP) — must sort by code point (JCS)
 - Response signature missing from server response
 - Response signature from a different secret
 - Response signature over partial payload (some fields stripped)
@@ -930,7 +952,7 @@ No SDK adds operations, parameters, events, or behavior beyond what this spec de
 
 1. Every SDK operation routes through the signed transport layer. No operation bypasses signing.
 2. The PaymentInstance stops polling on any terminal event (`success`, `failed`, `cancelled`, `error`). It never polls indefinitely.
-3. The canonical payload in signing uses deterministic key ordering. Two identical payloads produce identical canonical strings regardless of field insertion order.
+3. The canonical payload in signing is the JCS (RFC 8785) form: object keys sorted by Unicode code point (never a locale-sensitive comparison), arrays left in order, JCS number/string serialization. Two identical payloads produce identical canonical strings on every runtime and locale, regardless of field insertion order (D17).
 4. Response signature verification uses constant-time comparison. Timing attacks on signature validation are not possible.
 5. The factory validates configuration eagerly. An SDK instance with invalid credentials cannot be constructed.
 6. Auto-generated idempotency keys are unique per invocation. The probability of collision is negligible.
@@ -1006,9 +1028,14 @@ retry — so the fix was a verifier-only freshness window (default 300s) with no
 wire or sender change. Consumers should still apply their own idempotency as
 defence in depth, but a captured webhook no longer verifies forever.
 
-### F7: Locale-independent canonical payload sort
+### F7: Locale-independent canonical payload sort — RESOLVED
 
-- **What** — The canonical payload sorts object keys with a locale-sensitive comparison. When the SDK's runtime and the backend disagree on Unicode collation (e.g. non-ASCII `metadata` keys, or differing locale/collation configurations across runtimes), the same payload canonicalizes differently on each side → signature mismatch on otherwise-valid requests and responses.
-- **Why it's deferred** — The canonical string is the signed content in both directions, so the SDK and backend must change together (or accept both forms during a transition). It is an availability concern, not a forgery risk — an attacker still cannot produce a valid signature without the secret.
-- **Impact of deferring** — Plain lowercase ASCII keys are unaffected (code-point order equals the locale-sensitive order), so typical traffic verifies normally. Divergence is limited to payloads with mixed-case/non-ASCII keys.
-- **Proposed fix** — Sort object keys by Unicode code point (the RFC 8785 / JCS canonicalization rule) identically on both sides, with a dual-verify transition (try code-point order, fall back to the legacy order). Bundle with F6 as a single signing-change rollout. Parity tests must add mixed-case/diacritic/unicode key cases.
+Resolved in v1.0.8. See [D17](#d17-canonical-payload-uses-the-json-canonicalization-scheme-jcs),
+the [Request Signing](#request-signing) canonical-payload rules, and invariant 3.
+Both the SDK and the backend now sort object keys by Unicode code point (RFC 8785
+/ JCS) instead of a locale-sensitive comparison, changed in lockstep. A
+cross-language parity test covers mixed-case, underscore, digit, diacritic, CJK,
+and non-BMP keys plus number and unicode string values. The change was a clean
+break (no dual-verify): only divergent-key payloads differ between the old and
+new canonical forms, and ordinary ASCII/camelCase traffic is byte-identical under
+both.
