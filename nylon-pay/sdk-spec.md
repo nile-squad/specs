@@ -141,13 +141,13 @@ All SDKs are server-side. Client-side packages (browser, mobile) are a future sc
 - **Rationale** — Server-side initiation failure is an operational error that should surface through the event channel with structured metadata (`category`, `retryable`). Client-side validation errors (programmer mistakes) throw immediately. This separates concerns: `try/catch` for bugs, event handlers for operational failures.
 - **Tradeoffs** — The merchant must attach an `"error"` handler to catch server-side initiation failures. This is the correct trade: an unhandled event is visible in logs; an unhandled exception crashes the process.
 
-### D14: Status updates stream over SSE, with polling fallback
+### D14: Status updates are delivered by client polling
 
-- **Decision** — A PaymentInstance receives status transitions from a server-sent events (SSE) stream by default, and falls back to client-side polling automatically when the stream is unavailable or drops. Streaming is on by default and controlled by the `streaming` config flag. Polling is never removed — it is the guaranteed fallback.
-- **Context** — Client polling works but is higher-latency and chattier: every interval is a fresh signed HTTP request. A single long-lived stream pushes transitions as the server observes them, with one auth handshake. The merchant-facing surface (events, `wait()`, terminal-stop) must not change regardless of transport.
-- **Alternatives considered** — (a) Replace polling with SSE entirely. Rejected: proxies/buffering and restricted networks can break streaming; a fallback is mandatory. (b) WebSockets. Rejected: heavier than needed for one-directional status push; SSE over plain HTTP is simpler and proxy-friendlier. (c) Client keeps polling, server adds webhooks only. Rejected: webhooks are the merchant-server push channel, not a substitute for the PaymentInstance's own updates.
-- **Rationale** — The stream delivers the **same status shape** a one-shot `getStatus` returns, so the PaymentInstance handles a streamed update identically to a polled one — the transport is swappable beneath an unchanged contract. On stream failure the instance reconnects with jittered backoff, then falls back to polling. v1's server-side source is a read-only status poll inside the stream handler (works for sandbox and live, never touches the money path); a true event-bus push is a transparent future optimization that does not alter the wire format.
-- **Tradeoffs** — Two code paths (stream + poll) instead of one. Justified: the fallback is what makes streaming safe to enable by default. The SDK must ship an SSE client (server-side `fetch` streaming, not browser `EventSource`, so HMAC headers can be set).
+- **Decision** — A PaymentInstance tracks status transitions by polling the one-shot status operation at a configurable interval until the transaction reaches a terminal state. Each interval carries a small random jitter so many concurrent instances do not synchronise into a thundering herd against the status endpoint. There is one status transport, and it is polling.
+- **Context** — Async payment operations need status-transition notifications without forcing merchants to write polling loops. The PaymentInstance owns that loop internally. The transport must work everywhere an SDK runs — including restricted networks and proxies that buffer or break long-lived connections.
+- **Alternatives considered** — (a) Push status over a server-sent events (SSE) stream with polling as a fallback. Evaluated and removed: it required two code paths (stream plus the fallback poll), a streaming HTTP client able to set auth headers, and a bounded read buffer — all to optimise latency on a path the fallback already had to cover. The fallback being mandatory meant polling could never be removed, so the stream was pure added surface. (b) WebSockets. Rejected: heavier than needed for one-directional status push. (c) Server-to-merchant webhooks as a substitute. Rejected: webhooks are the merchant-server push channel, not the PaymentInstance's own update source.
+- **Rationale** — One transport is simpler to reason about, test, and port across languages. Polling is robust on every network, needs no special streaming client, and reuses the same signed transport and the same status shape as a one-shot status check — so a polled update and a one-shot check are handled identically. Jitter keeps a fleet of instances from aligning their requests.
+- **Tradeoffs** — Higher latency and more requests than a push stream. Accepted: status transitions are not latency-critical, the interval and caps are configurable, and jitter plus single-flight polling (only one request in flight per instance) bound the load.
 
 ### D15: Response verification is fail-closed
 
@@ -332,12 +332,12 @@ type EventData = {
 ```
 
 **Status updates:**
-- By default the instance subscribes to an SSE stream (see [Status Streaming](#status-streaming-sse)); it falls back to polling `getStatus` when streaming is disabled or unavailable. Either transport drives the same handler, so the behavior below holds regardless of source.
-- Polls `getStatus` at configurable interval (default 2s) when polling
+- Polls the one-shot status operation at a configurable interval (default 2s), with a small random jitter added to each interval so concurrent instances do not synchronise
+- Only one poll is in flight at a time; the next poll is scheduled only after the current one resolves
 - Stops on any terminal event
 - Stops after max attempts (default 150) or max duration (default 5 minutes)
 - Reference mismatch between initiation and a status update emits `error` and stops
-- Network errors during polling emit `error` and stop (after retries exhausted); a stream drop reconnects, then falls back to polling
+- Network errors during polling emit `error` and stop (after retries exhausted)
 
 ## Type Definitions
 
@@ -427,7 +427,6 @@ type NylonPayConfig = {
   maxPollIntervalMs?: number;
   maxPollDurationMs?: number;
   maxPollAttempts?: number;
-  streaming?: boolean; // default true — SSE status updates with polling fallback
   /** Custom fetch implementation. Defaults to `globalThis.fetch`. Essential for edge runtimes and testing. */
   fetch?: typeof globalThis.fetch;
   /** Force a new instance even if one already exists for this key+secret+url. Defaults to `false`. See D11. */
@@ -696,27 +695,15 @@ The server signs every response to prevent tampering:
 - Per-request timeout: configurable (default 30s), enforced via AbortController equivalent
 - On retry, the same idempotency key is reused — the SDK must not generate a new nonce/key per retry attempt
 
-### Status Streaming (SSE)
+### Status Polling
 
-A PaymentInstance receives status transitions over a long-lived SSE stream when `streaming` is enabled (default), falling back to polling otherwise (see [D14](#d14-status-updates-stream-over-sse-with-polling-fallback)).
+A PaymentInstance tracks status transitions by repeatedly calling the one-shot status operation until the transaction reaches a terminal state (see [D14](#d14-status-updates-are-delivered-by-client-polling)).
 
-**Endpoint.** `POST {origin}/sse/transaction`, where `{origin}` is the scheme + host of `baseUrl` (the stream route lives at the host root, not under the action path). The request body is `{ "reference": "<transaction reference>", "_fingerprint": "<fingerprint>" }`, signed with the **same HMAC protocol and headers** as every other request (`x-nylon-key`, `x-nylon-nonce`, `x-nylon-timestamp`, `x-nylon-signature`). The response is `Content-Type: text/event-stream`.
-
-**Stream events.** Each event carries the same shape a one-shot `getStatus` returns:
-
-```
-event: status
-data: {"reference":"...","status":"processing","amount":1000,"currency":"UGX","updatedAt":"..."}
-```
-
-- `status` — a transaction state. The SDK feeds each `data` payload into the same handler a polled status uses, so behavior is identical to polling.
-- `: heartbeat` comment lines keep the connection alive and are ignored.
-- The server emits the current state immediately on connect, pushes each transition, and closes the stream when the transaction reaches a terminal state.
-
-**Fallback and reconnection.**
-- A non-2xx response, malformed stream, or a drop before a terminal state causes the SDK to reconnect with jittered backoff, and after exhausting reconnects, to **fall back to polling** for the remainder of the instance's lifecycle.
-- The instance's events (`processing`/`success`/`failed`/`cancelled`/`error`), `wait()`, max-duration/attempt caps, and terminal-stop guarantee are identical regardless of transport.
-- The server emits current state on connect, so a reconnect cannot miss a transition (the SDK de-duplicates by `prev === next`).
+- **Single-flight.** Only one status request is in flight per instance. The next poll is scheduled only after the current one resolves, so requests never overlap.
+- **Jittered interval.** Each interval is the configured poll interval plus a small random jitter, so a fleet of concurrent instances does not synchronise into a thundering herd against the status endpoint.
+- **De-duplication.** A status update that matches the instance's current status emits no event. Only a transition (`prev !== next`) emits.
+- **Terminal stop.** On any terminal state the instance fetches the full transaction record, emits the terminal event, and stops. The max-attempt and max-duration caps bound a non-terminating transaction.
+- **Late-update guard.** Once an instance has resolved (terminal, error, or timeout) it emits no further events; an in-flight poll that resolves after that point is ignored.
 
 ## Error Categories
 
@@ -770,7 +757,6 @@ does not move real money; a live key processes real transactions. The SDK has no
 | `maxPollIntervalMs` | `2000` |
 | `maxPollDurationMs` | `300000` |
 | `maxPollAttempts` | `150` |
-| `streaming` | `true` |
 
 ## Implementation Requirements
 
@@ -794,7 +780,7 @@ Every SDK must ship a test suite covering:
 - PaymentInstance lifecycle (events, polling, terminal states, timeout, reference mismatch)
 - Retry behavior (retryable status codes, non-retryable status codes, backoff timing)
 - Webhook signature verification (valid, invalid, tampered)
-- The canonical Security Test suite (S1–S14, see §Security Tests) — required, not optional
+- The canonical Security Test suite (S1–S13, see §Security Tests) — required, not optional
 
 ### Edge Case Testing
 
@@ -848,7 +834,7 @@ Every SDK must test the following edge cases:
 
 ### Security Tests
 
-Every SDK implementation **MUST** ship a dedicated security test suite covering the canonical cases below. These are the cross-language contract for the SDK's cryptographic surface; IDs (S1–S14) are traceable from this document to each SDK's test code. They run with mocked transport — no network required.
+Every SDK implementation **MUST** ship a dedicated security test suite covering the canonical cases below. These are the cross-language contract for the SDK's cryptographic surface; IDs (S1–S13) are traceable from this document to each SDK's test code. They run with mocked transport — no network required.
 
 | ID  | Requirement |
 |-----|-------------|
@@ -865,7 +851,6 @@ Every SDK implementation **MUST** ship a dedicated security test suite covering 
 | S11 | The transport **rejects a success response whose signature is invalid**, and accepts one whose signature is valid. |
 | S12 | Config construction rejects an `apiKey` without the `npk_` prefix and an `apiSecret` without the `nps_` prefix. |
 | S13 | The API secret never appears on the SDK's public/serialized surface, and the instance cache is secret-aware (rotating the secret yields a different instance — it is never reused under a stale secret). |
-| S14 | The SSE read buffer is bounded. A stream that delivers data without a frame separator does not grow memory without limit — once the buffer exceeds the cap, the stream is closed and an error is surfaced (the instance then falls back to polling). |
 
 ### Integration Tests
 
@@ -900,8 +885,7 @@ Every SDK must ship an integration test suite that runs against a real sandbox b
 | I16 | Unknown key → auth category | `getStatus` / `collectPayment` | A well-formed but unknown key yields category `auth` — `getStatus` returns an error result, `collectPayment` throws. Sandbox-testable (unlike I15) |
 | I17 | Resolve returns full Transaction | `collectPaymentAndResolve` | Returns `id`, numeric `amount`, `metadata`, and (on failure) `failureReason` — never a partial stub |
 | I18 | Metadata round-trip | `collectPayment` + `getTransaction` | Merchant-supplied `metadata` is returned unchanged |
-| I19 | Streamed updates reach terminal | `collectPayment` + `wait()` | An SSE-streamed instance resolves to a terminal state and never hangs |
-| I20 | Polling fallback reaches terminal | `collectPayment` (`streaming: false`) + `wait()` | With streaming disabled, polling resolves to a terminal state |
+| I19 | Polling reaches terminal | `collectPayment` + `wait()` | A polling instance resolves to a terminal state and never hangs |
 
 **Test isolation rules:**
 
@@ -912,7 +896,7 @@ Every SDK must ship an integration test suite that runs against a real sandbox b
 
 **Cross-language parity:**
 
-- Every SDK language runs the same canonical tests (I1–I20). Language-specific additions are permitted but must not replace or weaken the canonical set. I19–I20 apply where the SDK implements SSE streaming; an SDK without streaming runs I20 (polling) only.
+- Every SDK language runs the same canonical tests (I1–I19). Language-specific additions are permitted but must not replace or weaken the canonical set.
 - Test names must reference the spec ID (e.g., `I3: idempotency on collect`) so coverage audits can trace from spec to implementation.
 
 ### Spec Compliance
@@ -934,16 +918,15 @@ No SDK adds operations, parameters, events, or behavior beyond what this spec de
 11. All public types, functions, and constants are documented. No undocumented public surface exists.
 12. `before*` hooks run after input validation and before the transport call. They cannot bypass validation. `after*` hooks run after the transport call, regardless of success or failure. Both are awaited synchronously in the call chain. A hook with `enabled: false` is skipped entirely.
 13. A `before*` hook whose `fn` returns `null` or `void` leaves the payload unchanged; only a non-null return value replaces the input. A hook `fn` that throws or rejects never bubbles into the payment flow — the error is routed to the hook's required `onError`, and the call proceeds (for `before*`, with the original unmutated payload). `onError` is itself contained, so a faulty handler cannot crash the SDK.
-14. Integration tests run against a real sandbox backend, not mocked transport. Every SDK implementation covers the same canonical test set (I1–I20) with spec IDs traceable from this document to the test code.
+14. Integration tests run against a real sandbox backend, not mocked transport. Every SDK implementation covers the same canonical test set (I1–I19) with spec IDs traceable from this document to the test code.
 15. Integration tests are isolated: each test uses a unique reference, does not depend on execution order, and does not assert on non-deterministic server timing.
 16. Every error exposes a `category` from the fixed taxonomy. The SDK never classifies errors by HTTP status code or by matching message text.
 17. `collectPayment` and `makePayout` return a PaymentInstance that emits an `"error"` event on server-side initiation failure (auth, limit, provider, network, timeout). Only client-side validation errors (zero amount, empty fields, invalid items) throw synchronously. A PaymentInstance may be constructed to carry an initiation error via the `initialError` mechanism.
 18. The blocking resolve variants return the full `Transaction` shape — the same fields as `getTransaction` — including `failureReason` and `metadata`. They never return a partial stub.
-19. SSE status streaming and polling are interchangeable beneath the PaymentInstance contract: both deliver the same status shape, drive the same events, and honor the same terminal-stop and cap guarantees. A stream failure falls back to polling without changing observable behavior. Streaming never removes polling.
-20. Response verification is fail-closed (D15): an authenticated success response without a valid `_responseSignature` is rejected as an `internal` error and its data is never returned. The SDK never exposes unverified response data.
-21. Every SDK ships the canonical Security Test suite (S1–S14) with spec IDs traceable from this document to the test code. All signature comparisons use a constant-time, length-guarded primitive.
-22. A PaymentInstance emits at most one terminal event and fires no events after it resolves (terminal state, error, or timeout). Late updates from either transport — a buffered stream frame delivered after fallback, or an in-flight poll — are ignored once resolved.
-23. The SSE read buffer is bounded: a stream that never delivers a frame separator cannot grow client memory without limit; exceeding the cap closes the stream and surfaces an error, after which the instance falls back to polling.
+19. Response verification is fail-closed (D15): an authenticated success response without a valid `_responseSignature` is rejected as an `internal` error and its data is never returned. The SDK never exposes unverified response data.
+20. Every SDK ships the canonical Security Test suite (S1–S13) with spec IDs traceable from this document to the test code. All signature comparisons use a constant-time, length-guarded primitive.
+21. A PaymentInstance emits at most one terminal event and fires no events after it resolves (terminal state, error, or timeout). An in-flight poll that resolves after the instance has resolved is ignored.
+22. The PaymentInstance makes at most one status request in flight at a time, and adds a random jitter to each poll interval so concurrent instances do not synchronise their requests.
 
 ## Prohibitions
 
@@ -983,11 +966,11 @@ No SDK adds operations, parameters, events, or behavior beyond what this spec de
 - **Why it's deferred** — No server-side version negotiation exists. All SDK versions target the same API contract.
 - **Impact of deferring** — Breaking API changes require coordinated SDK updates. Mitigated by semantic versioning and changelog communication.
 
-### F5: Server-sent events for status updates (SSE), with polling fallback — IMPLEMENTED
+### F5: Server-push status transport
 
-Implemented as of this spec version. See [D14](#d14-status-updates-stream-over-sse-with-polling-fallback) and [Status Streaming (SSE)](#status-streaming-sse). SSE is the default status-update transport; polling is the automatic fallback and is never removed. The PaymentInstance event surface and terminal-stop guarantees are identical across transports.
-
-Remaining optional optimization (not required for conformance): replace the server's v1 read-only status-poll source with a true event-bus push, transparent to the wire format.
+- **What** — Status updates are delivered by client polling ([D14](#d14-status-updates-are-delivered-by-client-polling)). A server-push transport (e.g. server-sent events or a long-lived stream) could lower transition latency and request volume.
+- **Why it's deferred** — A push transport was prototyped (SSE with a polling fallback) and removed: it required two code paths, a streaming HTTP client able to set auth headers, and a bounded read buffer, all while polling still had to exist as the universal fallback. The added surface did not justify the latency gain for a non-latency-critical path. Revisiting requires a transport that works across restrictive proxies without a mandatory polling fallback, or evidence that latency matters enough to carry both paths.
+- **Impact of deferring** — Status latency is bounded by the poll interval (default 2s) rather than near-real-time. Acceptable: the interval and caps are configurable, and jitter plus single-flight polling bound the load.
 
 ### F6: Webhook signature replay protection
 
