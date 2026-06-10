@@ -1,6 +1,6 @@
 # Nylon Pay SDK Spec
 
-**Version:** 1.1.0
+**Version:** 1.2.0
 
 > Canonical, language-agnostic specification for the Nylon Pay SDK. Implement it
 > in any language; the [TypeScript SDK](https://github.com/nile-squad/nylonpay-ts)
@@ -198,12 +198,24 @@ Input shape:
 - `currency` — ISO 4217 currency code
 - `customer` — `{ name, phoneNumber, email? }`
 - `description` — human-readable narration
-- `reference?` — merchant-supplied idempotency key (auto-generated if omitted)
+- `reference?` — merchant-supplied idempotency key (auto-generated if omitted). When supplied, it MUST be 13–15 characters (see [Reference constraints](#reference-constraints)).
 - `method?` — payment method: `"mobileMoney"` or `"bank"` (defaults to `"mobileMoney"`)
 - `bank?` — required when `method` is `"bank"`: `{ accountNumber, bankName }`
 - `metadata?` — arbitrary key-value pairs attached to the transaction
 
 Returns: `PaymentInstance`
+
+#### Reference constraints
+
+A supplied `reference` MUST be **13–15 characters** on every create operation
+(`collectPayment`, `collectPaymentAndResolve`, `makePayout`, `makePayoutAndResolve`,
+`createInvoice`). The backend echoes the reference verbatim as the provider's
+`merchantTransactionId`, which is bounded to 13–15 characters; an out-of-range
+reference is rejected. Implementations MUST validate this **synchronously** at the
+call site (same as `amount`) and raise a `validation` error — they MUST NOT defer it
+to a network round-trip. An omitted `reference` is auto-generated as a 15-character
+value and always satisfies the constraint. Common pitfall: passing a 36-character
+UUID order id — hash or truncate it to ≤15 characters first.
 
 ### collectPaymentAndResolve
 
