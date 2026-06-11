@@ -6,6 +6,24 @@
 > in any language; the [TypeScript SDK](https://github.com/nile-squad/nylonpay-ts)
 > is the reference implementation.
 
+## How to Read This Spec
+
+The spec is long because it is the single source of truth for every SDK. You do not
+need all of it at once — pick the path that matches what you came for:
+
+| You want to… | Read |
+|--------------|------|
+| Build a new SDK from scratch | [Principles](#principles) → [Operations](#operations) → [Transport Contract](#transport-contract) → [PaymentInstance Contract](#paymentinstance-contract) → [Type Definitions](#type-definitions) → [Implementation Requirements](#implementation-requirements) |
+| Wire up raw backend calls (no SDK yet) | [Transport Contract](#transport-contract), especially [Action Payloads](#action-payloads) |
+| Understand *why* something is the way it is | [Decision Records](#decision-records) (D1–D17) |
+| Audit or review an implementation | [Invariants](#invariants), [Prohibitions](#prohibitions), and the test suites in [Implementation Requirements](#implementation-requirements) |
+| Check what is intentionally not done yet | [Follow-Up Work](#follow-up-work) (F1–F7) |
+
+Normative language: **MUST**/**MUST NOT** are hard requirements verified by the
+canonical test suites; everything else is contract description. Decision records
+are rationale, not requirements — an implementation is judged against Operations,
+Transport, Invariants, and Prohibitions.
+
 ## Purpose
 
 The Nylon Pay SDK is the merchant's programmatic interface to the payment platform. It provides a consistent API across multiple languages for collecting payments, making payouts, verifying phones, creating invoices, checking transaction status, and verifying webhooks. The SDK abstracts the transport protocol, HMAC signing, polling mechanics, and error handling so merchants interact with payment operations — not infrastructure.
@@ -632,7 +650,7 @@ The Nylon Pay backend uses Nile.js action-based routing. All SDK requests target
 
 All requests are `POST` to `{baseUrl}`.
 
-The default `baseUrl` is `https://api.nylonpay.nilesquad.com/api/services` — a single URL that includes both the origin and the path. The SDK appends no further path segments; the body identifies the service and action.
+The default `baseUrl` is `https://api.nylonpay.nilesquad.com/api/services` — a single URL that includes both the origin and the path. The SDK appends no further path segments; the body identifies the service and action. Every SDK MUST default to this URL and MUST allow the merchant to override it in configuration — some merchants run against a custom base URL for special integrations, but the default is what ships.
 
 There are no RESTful routes, no query parameters, no HTTP method variety. Every operation — regardless of type — hits the same endpoint with a different JSON body.
 
@@ -650,8 +668,8 @@ Every request body has this shape:
 ```
 
 - `intent` — always `"execute"` for SDK operations
-- `service` — the server-side service group (e.g., `"collections"`, `"payouts"`, `"payment-links"`)
-- `action` — the specific operation within the service (e.g., `"create-collection"`, `"get-collection-status"`)
+- `service` — always `"sdk"`: every SDK operation targets the backend's `sdk` service, the merchant-facing API surface. Other services exist on the same endpoint but are not part of this contract.
+- `action` — the specific operation within the `sdk` service (the `sdk-*` names in the table below)
 - `payload` — the operation's input data, plus `_fingerprint` injected by the SDK
 
 The SDK maps each public operation to a service/action pair:
@@ -666,6 +684,86 @@ The SDK maps each public operation to a service/action pair:
 | `makePayoutAndResolve` | `sdk` | `sdk-make-payout-and-resolve` |
 | `verifyPhone` | `sdk` | `sdk-verify-phone` |
 | `createInvoice` | `sdk` | `sdk-create-invoice` |
+
+### Action Payloads
+
+What the backend's `sdk` service accepts per action, as enforced by its validation
+schemas. This is the integration contract for anyone implementing an SDK (or calling
+the backend directly): a payload that violates these rules is rejected with a
+`validation` error before any payment work happens. SDKs MUST mirror the cheap
+synchronous checks client-side (amount, reference length, required fields) so bad
+input fails before a network round-trip; the server remains the source of truth.
+
+The resolve variants (`sdk-collect-payment-and-resolve`, `sdk-make-payout-and-resolve`)
+accept exactly the same payload as their base actions.
+
+**`sdk-collect-payment`** (and `-and-resolve`):
+
+| Field | Type | Required | Validation |
+|-------|------|----------|------------|
+| `amount` | number | yes | minimum 500 |
+| `currency` | string | no | defaults to `"UGX"` |
+| `customer.name` | string | yes | |
+| `customer.phoneNumber` | string | yes | must parse as a valid phone number |
+| `customer.email` | string | no | |
+| `description` | string | yes | |
+| `method` | string | no | `"mobileMoney"` or `"bank"`; defaults to `"mobileMoney"` |
+| `bank.accountNumber` | string | with `method: "bank"` | |
+| `bank.bankName` | string | with `method: "bank"` | |
+| `reference` | string | no | 13–15 characters (see [Reference constraints](#reference-constraints)) |
+| `metadata` | object | no | string keys to string values; defaults to `{}` |
+
+**`sdk-make-payout`** (and `-and-resolve`):
+
+| Field | Type | Required | Validation |
+|-------|------|----------|------------|
+| `amount` | number | yes | minimum 500 |
+| `currency` | string | no | defaults to `"UGX"` |
+| `customer.name` | string | yes | |
+| `customer.phoneNumber` | string | yes | must parse as a valid phone number |
+| `customer.email` | string | no | |
+| `destination.accountHolderName` | string | yes | |
+| `destination.accountNumber` | string | yes | |
+| `destination.bankName` | string | no | |
+| `destination.phone` | string | no | |
+| `description` | string | yes | |
+| `reference` | string | no | 13–15 characters |
+| `metadata` | object | no | string keys to string values; defaults to `{}` |
+
+**`sdk-get-status`**:
+
+| Field | Type | Required | Validation |
+|-------|------|----------|------------|
+| `reference` | string | yes | non-empty |
+
+**`sdk-get-transaction`**:
+
+| Field | Type | Required | Validation |
+|-------|------|----------|------------|
+| `id` | string | no | at least one of `id`/`reference` required |
+| `reference` | string | no | at least one of `id`/`reference` required |
+
+**`sdk-verify-phone`**:
+
+| Field | Type | Required | Validation |
+|-------|------|----------|------------|
+| `phoneNumber` | string | yes | must parse as a valid phone number |
+| `purpose` | string | no | `"collection"` or `"payout"` |
+
+**`sdk-create-invoice`**:
+
+| Field | Type | Required | Validation |
+|-------|------|----------|------------|
+| `amount` | number | yes | minimum 500 |
+| `currency` | string | no | defaults to `"UGX"` |
+| `description` | string | yes | |
+| `items[]` | array | no | max 50 of `{ name: string, quantity: number > 0, unitPrice: number > 0 }` |
+| `redirectUrl` | string | no | must be a valid URL |
+| `reference` | string | no | 13–15 characters |
+| `metadata` | object | no | string keys to string values; defaults to `{}` |
+
+Invoices are live-mode only: calling `sdk-create-invoice` with a sandbox (test-mode)
+API key returns a `validation` error.
 
 ### Response Format
 
