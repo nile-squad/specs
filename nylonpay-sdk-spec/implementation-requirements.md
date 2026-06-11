@@ -124,7 +124,8 @@ Every SDK must ship an integration test suite that runs against a real sandbox b
 | I11 | Key validation — bad apiSecret prefix | `createNylonPay` | Throws/returns error for secrets without `nps_` prefix |
 | I12 | Singleton behavior | `createNylonPay` × 2 | Second call without `force` returns the same instance |
 | I13 | Unknown reference | `getTransaction` | Returns error for a reference that doesn't exist |
-| I14 | Sub-minimum amount | `collectPayment` | Server rejects amounts below 500 with a validation error |
+| I14 | Sub-minimum collection amount | `collectPayment` | Server rejects amounts below 500 UGX with a validation error |
+| I14b | Sub-minimum payout amount | `makePayout` | Server rejects amounts below 5000 UGX with a validation error |
 | I15 | Revoked key (live-only) | `collectPayment` | Server rejects a revoked API key — `collectPayment` throws an error with category `auth` (HTTP 400, not 401). Skipped unless `NYLONPAY_TEST_MODE=live` |
 | I16 | Unknown key → auth category | `getStatus` / `collectPayment` | A well-formed but unknown key yields category `auth` — `getStatus` returns an error result, `collectPayment` throws. Sandbox-testable (unlike I15) |
 | I17 | Resolve returns full Transaction | `collectPaymentAndResolve` | Returns `id`, numeric `amount`, `metadata`, and (on failure) `failureReason` — never a partial stub |
