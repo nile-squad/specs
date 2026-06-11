@@ -14,7 +14,7 @@ implementations follow.
 
 | Product | Spec | What it is | Reference implementation |
 |---------|------|------------|--------------------------|
-| **Nylon Pay** | [`nylon-pay/sdk-spec.md`](./nylon-pay/sdk-spec.md) | Server-side SDK for collecting payments, payouts, phone verification, invoices, transaction status, and webhook verification over a signed, action-based transport. | [nylonpay-ts](https://github.com/nile-squad/nylonpay-ts) (TypeScript) |
+| **Nylon Pay** | [`nylonpay-sdk-spec/`](./nylonpay-sdk-spec/spec.md) | Server-side SDK for collecting payments, payouts, phone verification, invoices, transaction status, and webhook verification over a signed, action-based transport. | [nylonpay-ts](https://github.com/nile-squad/nylonpay-ts) (TypeScript) |
 | **AI** | _coming soon_ | Specification for Nile Squad AI integrations. | — |
 
 ## Implementing an SDK from a spec
