@@ -235,7 +235,7 @@ Input shape:
 - `customer` — `{ name, phoneNumber, email? }`
 - `destination` — `{ accountHolderName, accountNumber, bankName?, phone? }`
 - `description` — narration
-- `reference?` — idempotency key
+- `reference?` — idempotency key; when supplied, MUST be 13–15 characters (see [Reference constraints](#reference-constraints))
 - `metadata?` — arbitrary key-value pairs
 
 Returns: `PaymentInstance`
@@ -289,7 +289,7 @@ Input shape:
 - `description` — invoice narration
 - `items?` — array of `{ name, quantity, unitPrice }` (max 50 items)
 - `redirectUrl?` — URL to redirect customer after payment
-- `reference?` — idempotency key
+- `reference?` — idempotency key; when supplied, MUST be 13–15 characters (see [Reference constraints](#reference-constraints))
 - `metadata?` — arbitrary key-value pairs
 
 Returns: `{ id, url, token, expiresAt, status }`
@@ -978,7 +978,7 @@ No SDK adds operations, parameters, events, or behavior beyond what this spec de
 14. Integration tests run against a real sandbox backend, not mocked transport. Every SDK implementation covers the same canonical test set (I1–I19) with spec IDs traceable from this document to the test code.
 15. Integration tests are isolated: each test uses a unique reference, does not depend on execution order, and does not assert on non-deterministic server timing.
 16. Every error exposes a `category` from the fixed taxonomy. The SDK never classifies errors by HTTP status code or by matching message text.
-17. `collectPayment` and `makePayout` return a PaymentInstance that emits an `"error"` event on server-side initiation failure (auth, limit, provider, network, timeout). Only client-side validation errors (zero amount, empty fields, invalid items) throw synchronously. A PaymentInstance may be constructed to carry an initiation error via the `initialError` mechanism.
+17. `collectPayment` and `makePayout` return a PaymentInstance that emits an `"error"` event on server-side initiation failure (auth, limit, provider, network, timeout). Only client-side validation errors (zero amount, empty fields, invalid items, out-of-range `reference` length) throw synchronously. A PaymentInstance may be constructed to carry an initiation error via the `initialError` mechanism.
 18. The blocking resolve variants return the full `Transaction` shape — the same fields as `getTransaction` — including `failureReason` and `metadata`. They never return a partial stub.
 19. Response verification is fail-closed (D15): an authenticated success response without a valid `_responseSignature` is rejected as an `internal` error and its data is never returned. The SDK never exposes unverified response data.
 20. Every SDK ships the canonical Security Test suite (S1–S14) with spec IDs traceable from this document to the test code. All signature comparisons use a constant-time, length-guarded primitive.
