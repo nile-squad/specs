@@ -99,9 +99,48 @@ type NylonPayConfig = {
 
 type Customer = {
   name: string;
+  /** Phone number in any common format — normalized automatically to international format */
   phoneNumber: string;
   email?: string;
 };
+
+#### Phone Number Normalization
+
+Every `phoneNumber` field accepted by the SDK is normalized to international format
+(`256XXXXXXXXX`) before it reaches the backend. The normalization runs at three
+layers for defense-in-depth:
+
+1. **SDK (client-side)** — `normalizePhone()` runs synchronously before the request
+   is signed and sent. The wire payload always carries the normalized number.
+2. **Backend Zod schema** — `phoneNumberSchema` validates then transforms the
+   number to normalized form. Catches callers that bypass the SDK.
+3. **Provider formatters** — `formatPhoneForPivot()` normalizes before handing the
+   number to the provider. Defense-in-depth at the provider boundary.
+
+Normalization rules:
+
+| Rule | Example |
+|------|---------|
+| Strip all whitespace | `+256 768 499 027` → `+256768499027` |
+| Strip leading `+` | `+256768499027` → `256768499027` |
+| If starts with `0` and length is 10, prepend `256` | `0768499027` → `256768499027` |
+| Already normalized passes through | `256768499027` → `256768499027` |
+
+The normalized result is what gets stored in the `Transaction.phone` field and sent
+to payment providers.
+
+**Accepted input formats (any of these work):**
+
+| Format | Pattern | Example |
+|--------|---------|---------|
+| Local (10-digit) | `0XXXXXXXXX` | `0768499027` |
+| International with `+` | `+256XXXXXXXXX` | `+256768499027` |
+| International without `+` | `256XXXXXXXXX` | `256768499027` |
+| With spaces (any format) | — | `+256 768 499 027`, `256 768 499 027` |
+
+Merchants can pass phone numbers in any of these formats. The system handles
+normalization — the merchant does not need to format numbers before calling
+the SDK.
 
 type Destination = {
   accountHolderName: string;
@@ -185,6 +224,7 @@ type Transaction = {
   // for a reused reference — no new payment was initiated. See
   // "Reference uniqueness and replay" in operations.md.
   duplicate?: boolean;
+  /** Normalized international format (256XXXXXXXXX) — see Phone Number Normalization below */
   phone: string;
   email: string | null;
   failureReason: string | null;

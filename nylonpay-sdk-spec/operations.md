@@ -23,7 +23,11 @@ Initiates a payment collection. Returns a PaymentInstance that polls until the t
 Input shape:
 - `amount` — positive integer in smallest currency unit (e.g., cents, shillings)
 - `currency` — ISO 4217 currency code
-- `customer` — `{ name, phoneNumber, email? }`
+- `customer` — `{ name, phoneNumber, email? }`. The `phoneNumber` is normalized
+  automatically to international format (`256XXXXXXXXX`) by the SDK before the
+  request leaves. Accepted formats: local (`0768499027`), international with `+`
+  (`+256768499027`), international without `+` (`256768499027`), with or without
+  spaces. See [Phone Number Normalization](./types.md#phone-number-normalization).
 - `description` — human-readable narration
 - `reference?` — merchant-supplied idempotency key (auto-generated if omitted). When supplied, it MUST be 13–15 characters (see [Reference constraints](#reference-constraints)).
 - `method?` — payment method: `"mobileMoney"` or `"bank"` (defaults to `"mobileMoney"`)
@@ -75,7 +79,9 @@ Initiates a disbursement. Returns a PaymentInstance that polls until the payout 
 Input shape:
 - `amount` — positive integer
 - `currency` — ISO 4217
-- `customer` — `{ name, phoneNumber, email? }`
+- `customer` — `{ name, phoneNumber, email? }`. The `phoneNumber` is normalized
+  automatically to international format (`256XXXXXXXXX`). Same accepted formats as
+  `collectPayment`. See [Phone Number Normalization](./types.md#phone-number-normalization).
 - `destination` — `{ accountHolderName, accountNumber, bankName?, phone? }`
 - `description` — narration
 - `reference?` — idempotency key; when supplied, MUST be 13–15 characters (see [Reference constraints](#reference-constraints))
@@ -117,7 +123,9 @@ Returns: full transaction record (see [Transaction Shape](./types.md#transaction
 Pre-validates a phone number with the payment provider. Returns the registered name on the account.
 
 Input shape:
-- `phoneNumber` — E.164 or local format
+- `phoneNumber` — any accepted format (local `0XXXXXXXXX`, international `+256XXXXXXXXX`
+  or `256XXXXXXXXX`, with or without spaces). The backend normalizes it to international
+  format. See [Phone Number Normalization](./types.md#phone-number-normalization).
 - `purpose?` — `"collection"` or `"payout"` (provider may route differently)
 
 Returns: `{ phoneNumber, customerName, verified }`

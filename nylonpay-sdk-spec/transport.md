@@ -62,7 +62,7 @@ accept exactly the same payload as their base actions.
 | `amount` | number | yes | minimum 500 |
 | `currency` | string | no | defaults to `"UGX"` |
 | `customer.name` | string | yes | |
-| `customer.phoneNumber` | string | yes | must parse as a valid phone number |
+| `customer.phoneNumber` | string | yes | validated and normalized to international format (`256XXXXXXXXX`) |
 | `customer.email` | string | no | |
 | `description` | string | yes | |
 | `method` | string | no | `"mobileMoney"` or `"bank"`; defaults to `"mobileMoney"` |
@@ -78,7 +78,7 @@ accept exactly the same payload as their base actions.
 | `amount` | number | yes | minimum 500 |
 | `currency` | string | no | defaults to `"UGX"` |
 | `customer.name` | string | yes | |
-| `customer.phoneNumber` | string | yes | must parse as a valid phone number |
+| `customer.phoneNumber` | string | yes | validated and normalized to international format (`256XXXXXXXXX`) |
 | `customer.email` | string | no | |
 | `destination.accountHolderName` | string | yes | |
 | `destination.accountNumber` | string | yes | |
@@ -105,7 +105,7 @@ accept exactly the same payload as their base actions.
 
 | Field | Type | Required | Validation |
 |-------|------|----------|------------|
-| `phoneNumber` | string | yes | must parse as a valid phone number |
+| `phoneNumber` | string | yes | validated and normalized to international format (`256XXXXXXXXX`) |
 | `purpose` | string | no | `"collection"` or `"payout"` |
 
 **`sdk-create-invoice`**:
