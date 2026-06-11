@@ -44,6 +44,22 @@ to a network round-trip. An omitted `reference` is auto-generated as a 15-charac
 value and always satisfies the constraint. Common pitfall: passing a 36-character
 UUID order id — hash or truncate it to ≤15 characters first.
 
+#### Reference uniqueness and replay
+
+The reference is the transaction identity and the only idempotency mechanism —
+there is no separate idempotency key.
+
+- **One reference, one transaction.** Calling a create operation again with the
+  same reference does NOT charge again: the server replays the existing
+  transaction's current state, and the response carries `duplicate: true`.
+- **A new transaction needs a new reference.** Same customer, same amount, same
+  timing — none of it matters; a fresh reference always starts a fresh payment.
+- A reference that is taken and cannot be replayed (it belongs to another
+  account) fails with the `duplicate` error category — see
+  [Error Categories](./errors.md). Retry with a new reference.
+- Retrying a network failure (5xx/timeout) MUST reuse the same reference so the
+  retry replays instead of double-charging.
+
 ### collectPaymentAndResolve
 
 Initiates a payment collection and blocks until the transaction reaches a terminal state. Equivalent to calling `collectPayment` then `wait()`, but provided as a single operation for convenience in synchronous contexts.

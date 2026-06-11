@@ -181,6 +181,10 @@ type Transaction = {
   type: TransactionType;
   method: PaymentMethod;
   description: string;
+  // Present (true) only when this response replayed an existing transaction
+  // for a reused reference — no new payment was initiated. See
+  // "Reference uniqueness and replay" in operations.md.
+  duplicate?: boolean;
   phone: string;
   email: string | null;
   failureReason: string | null;
