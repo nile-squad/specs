@@ -765,6 +765,72 @@ accept exactly the same payload as their base actions.
 Invoices are live-mode only: calling `sdk-create-invoice` with a sandbox (test-mode)
 API key returns a `validation` error.
 
+### Example Exchange
+
+A complete `sdk-collect-payment` call. The four `x-nylon-*` headers are computed per
+[Request Signing](#request-signing); `_fingerprint` is injected into the payload by the
+SDK's transport layer.
+
+Request:
+
+```
+POST https://api.nylonpay.nilesquad.com/api/services
+content-type: application/json
+x-nylon-key: npk_live_...
+x-nylon-nonce: 3f9c1a7e5b2d48c6a0e8f4b1d7c92e50
+x-nylon-timestamp: 1781136000000
+x-nylon-signature: <hex HMAC-SHA256 of fingerprint.nonce.timestamp.canonicalPayload>
+
+{
+  "intent": "execute",
+  "service": "sdk",
+  "action": "sdk-collect-payment",
+  "payload": {
+    "amount": 5000,
+    "currency": "UGX",
+    "customer": { "name": "Jane Doe", "phoneNumber": "+256700000000" },
+    "description": "Order payment",
+    "method": "mobileMoney",
+    "reference": "ORDER-2026-001",
+    "metadata": { "orderId": "12345" },
+    "_fingerprint": "<transport-generated fingerprint>"
+  }
+}
+```
+
+Success response (HTTP `200`):
+
+```
+{
+  "status": true,
+  "message": "OK",
+  "data": {
+    "reference": "ORDER-2026-001",
+    "status": "pending",
+    "transactionId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+    "createdAt": "2026-06-11T09:30:00.000Z",
+    "_responseSignature": "<hex HMAC-SHA256 over data minus this field>"
+  }
+}
+```
+
+The SDK verifies `_responseSignature`, strips it, and returns the rest of `data` to
+the merchant. The transaction starts at `"pending"`; the PaymentInstance polls
+`sdk-get-status` with the reference until a terminal status.
+
+Error response (HTTP `400`):
+
+```
+{
+  "status": false,
+  "message": "Amount must be at least 500 -- error-type: validation",
+  "data": {}
+}
+```
+
+The SDK splits the ` -- error-type: ` suffix into the structured error's `category`
+(here `validation`) and keeps the human-readable part as the message.
+
 ### Response Format
 
 Every server response has this shape:
