@@ -59,7 +59,7 @@ accept exactly the same payload as their base actions.
 
 | Field | Type | Required | Validation |
 |-------|------|----------|------------|
-| `amount` | number | yes | minimum 500 |
+| `amount` | number | yes | minimum 500 UGX |
 | `currency` | string | no | defaults to `"UGX"` |
 | `customer.name` | string | yes | |
 | `customer.phoneNumber` | string | yes | validated and normalized to international format (`256XXXXXXXXX`) |
@@ -75,7 +75,7 @@ accept exactly the same payload as their base actions.
 
 | Field | Type | Required | Validation |
 |-------|------|----------|------------|
-| `amount` | number | yes | minimum 500 |
+| `amount` | number | yes | minimum 5000 UGX |
 | `currency` | string | no | defaults to `"UGX"` |
 | `customer.name` | string | yes | |
 | `customer.phoneNumber` | string | yes | validated and normalized to international format (`256XXXXXXXXX`) |
@@ -112,7 +112,7 @@ accept exactly the same payload as their base actions.
 
 | Field | Type | Required | Validation |
 |-------|------|----------|------------|
-| `amount` | number | yes | minimum 500 |
+| `amount` | number | yes | minimum 500 UGX |
 | `currency` | string | no | defaults to `"UGX"` |
 | `description` | string | yes | |
 | `items[]` | array | no | max 50 of `{ name: string, quantity: number > 0, unitPrice: number > 0 }` |
