@@ -661,14 +661,14 @@ Every request body has this shape:
 ```
 {
   "intent": "execute",
-  "service": "<service-name>",
+  "service": "sdk",
   "action": "<action-name>",
   "payload": { ... }
 }
 ```
 
 - `intent` — always `"execute"` for SDK operations
-- `service` — always `"sdk"`: every SDK operation targets the backend's `sdk` service, the merchant-facing API surface. Other services exist on the same endpoint but are not part of this contract.
+- `service` — always `"sdk"`: every SDK operation targets the `sdk` service, the merchant-facing API surface.
 - `action` — the specific operation within the `sdk` service (the `sdk-*` names in the table below)
 - `payload` — the operation's input data, plus `_fingerprint` injected by the SDK
 
