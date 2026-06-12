@@ -224,6 +224,10 @@ type Transaction = {
   // for a reused reference — no new payment was initiated. See
   // "Reference uniqueness and replay" in operations.md.
   duplicate?: boolean;
+  // The underlying operator's (telco's/bank's) own transaction id — what the
+  // paying customer sees on their receipt. For cross-validating customer pay
+  // claims. Null until the operator reports it (typically at terminal status).
+  operatorTid?: string | null;
   /** Normalized international format (256XXXXXXXXX) — see Phone Number Normalization below */
   phone: string;
   email: string | null;
