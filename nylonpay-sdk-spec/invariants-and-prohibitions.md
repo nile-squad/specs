@@ -15,7 +15,7 @@ Part of the [Nylon Pay SDK Spec](./spec.md).
 9. The PaymentInstance `reference` property is immutable after creation. It cannot be reassigned or mutated.
 10. Handler errors in the pubsub system are caught and do not propagate to other handlers or the polling loop.
 11. All public types, functions, and constants are documented. No undocumented public surface exists.
-12. `before*` hooks run after input validation and before the transport call. They cannot bypass validation. `after*` hooks run after the transport call, regardless of success or failure. Both are awaited synchronously in the call chain. A hook with `enabled: false` is skipped entirely.
+12. `before*` hooks run after input validation and before the transport call. They cannot bypass validation: a hook's mutated payload is re-run through the **full** synchronous validation + normalization suite (reference length, amount, required fields, phone format) before it is sent — a hook can no more smuggle an out-of-range reference or sub-minimum amount past the checks than the original caller can. `after*` hooks run after the transport call, regardless of success or failure. Both are awaited synchronously in the call chain. A hook with `enabled: false` is skipped entirely.
 13. A `before*` hook whose `fn` returns `null` or `void` leaves the payload unchanged; only a non-null return value replaces the input. A hook `fn` that throws or rejects never bubbles into the payment flow — the error is routed to the hook's required `onError`, and the call proceeds (for `before*`, with the original unmutated payload). `onError` is itself contained, so a faulty handler cannot crash the SDK.
 14. Integration tests run against a real sandbox backend, not mocked transport. Every SDK implementation covers the same canonical test set (I1–I19) with spec IDs traceable from this document to the test code.
 15. Integration tests are isolated: each test uses a unique reference, does not depend on execution order, and does not assert on non-deterministic server timing.
@@ -27,6 +27,7 @@ Part of the [Nylon Pay SDK Spec](./spec.md).
 21. A PaymentInstance emits at most one terminal event and fires no events after it resolves (terminal state, error, or timeout). An in-flight poll that resolves after the instance has resolved is ignored.
 22. The PaymentInstance makes at most one status request in flight at a time, and adds a random jitter to each poll interval so concurrent instances do not synchronise their requests.
 23. Webhook verification is replay-protected (D16): after the HMAC verifies, the timestamp inside the signed body must be within the tolerance window (default 300s) or verification fails. The freshness anchor is the signed timestamp, never an unsigned header, so it cannot be refreshed without the secret. A `0` tolerance disables the check.
+24. Every `SdkError.message` surfaced to a merchant is humanized: it states the outcome in plain language with no internal mechanics (no `polling`, `nonce`, `HMAC`/signature verification, library or internal field names, or raw error/stack dumps) and renders any time or duration in human units, never raw milliseconds or ISO timestamps. The machine-readable signal lives in `category`/`retryable`; the message is for a person. See [Error Categories — Message style](./errors.md#message-style--humanized-no-internal-mechanics).
 
 ## Prohibitions
 
@@ -38,5 +39,5 @@ Part of the [Nylon Pay SDK Spec](./spec.md).
 6. The SDK never exposes the fingerprint generation algorithm as a public API. It is an internal transport concern.
 7. The SDK never modifies merchant-supplied metadata. It passes through to the server and back unchanged.
 8. The SDK never throws on runtime/operational errors (network failures, provider rejections, timeouts). These are returned as error results. Only programmer errors (invalid config, missing required fields) throw.
-9. Hooks never receive or expose API secrets, raw provider payloads, or internal transport state. The `before*` and `after*` hook signatures are bounded to the merchant-facing input and a normalized result — nothing more.
+9. Hooks never receive or expose API secrets, raw provider payloads, or internal transport state. The `before*` and `after*` hook signatures are bounded to the merchant-facing input and a normalized result — nothing more. An `after*` hook's `input` is the final wire payload (reference resolved, phone normalized, `before*`-hook mutations applied), and `input.raw` carries the untouched original merchant input; neither exposes secrets, provider data, or transport internals (the reference and normalized phone are themselves merchant-facing values returned in the result).
 

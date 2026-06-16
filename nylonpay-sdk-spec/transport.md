@@ -270,7 +270,7 @@ The server signs every response to prevent tampering:
 - Exponential backoff: `2^attempt * 1000 + random(0-500)` ms
 - Max retries: configurable (default 3)
 - Per-request timeout: configurable (default 30s), enforced via AbortController equivalent
-- On retry, the same idempotency key is reused — the SDK must not generate a new nonce/key per retry attempt
+- On retry, the request **body is unchanged** (same payload, same `reference`), but each attempt is **signed fresh** — a new `nonce`, `timestamp`, and `signature` per try. Idempotency is carried by the constant `reference` (see [D18](./decision-records.md#d18-the-reference-is-the-only-transaction-identity-no-separate-idempotency-key-no-heuristic-duplicate-detection)), not by reusing the nonce. Re-signing keeps a post-backoff retry inside the server's timestamp-freshness window and prevents a retry from being rejected as a nonce replay (see [D19](./decision-records.md#d19-retries-are-signed-fresh-per-attempt-reference-not-nonce-carries-idempotency))
 
 ### Status Polling
 

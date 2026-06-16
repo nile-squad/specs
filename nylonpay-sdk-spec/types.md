@@ -56,6 +56,12 @@ type SdkHook<Fn> = {
   onError: (error: unknown) => void | Promise<void>;
 };
 
+// The input handed to an after* hook: the final wire payload (reference
+// resolved, phone normalized, before*-hook mutations applied), plus `raw`
+// carrying the untouched original merchant input. This lets a hook log both
+// what hit the wire and what the merchant typed.
+type AfterHookInput<Input> = Input & { raw: Input };
+
 type SdkHooks = {
   beforeCollect?: SdkHook<
     (
@@ -65,7 +71,7 @@ type SdkHooks = {
   afterCollect?: SdkHook<
     (
       result: Result<{ reference: string; status: string }, string>,
-      input: CollectPaymentInput,
+      input: AfterHookInput<CollectPaymentInput>,
     ) => void | Promise<void>
   >;
   beforePayout?: SdkHook<
@@ -76,7 +82,7 @@ type SdkHooks = {
   afterPayout?: SdkHook<
     (
       result: Result<{ reference: string; status: string }, string>,
-      input: MakePayoutInput,
+      input: AfterHookInput<MakePayoutInput>,
     ) => void | Promise<void>
   >;
 };

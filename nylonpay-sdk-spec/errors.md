@@ -29,6 +29,24 @@ type SdkError = {
 - `network`, `timeout` are produced by the SDK transport when the request never completed.
 - Merchants branch on `category`, never on `message` text or HTTP status.
 
+## Message style — humanized, no internal mechanics
+
+The `category` (and `retryable`) carry the machine-readable signal; the `message`
+is for a human and MUST stay human. Every `message` the SDK surfaces:
+
+- States the outcome and, where useful, a next step, in plain language.
+- Exposes NO internal mechanics — no `polling`, `nonce`, `HMAC`/signature
+  verification, library names, internal field names, or raw error/stack dumps.
+- Expresses any time or duration in human units ("about 2 minutes", "a few
+  seconds"), never raw milliseconds or ISO timestamps.
+
+Examples: a status-resolution timeout reads "Timed out waiting for the transaction
+status to update" (category `timeout`), not "Polling timeout: exceeded maximum
+duration"; an unverifiable response reads "Could not verify the server response"
+(category `internal`), not "Response signature verification failed". The same rule
+applies to any duration the SDK or backend renders for a person (for example
+processing time in a transaction view): humanized, never raw units.
+
 ## The `duplicate` category
 
 The reference is the transaction identity: **same reference = same transaction**.
