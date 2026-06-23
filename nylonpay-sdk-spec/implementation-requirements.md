@@ -88,7 +88,7 @@ Every SDK implementation **MUST** ship a dedicated security test suite covering 
 | S5  | Response verification **accepts** a payload with a valid signature. |
 | S6  | Response verification **rejects** a tampered payload, and rejects a signature produced with a different secret. |
 | S7  | Response verification rejects malformed, empty, short, or non-hex signatures **without throwing** (length-guarded constant-time compare), and rejects a one-byte-flipped signature. |
-| S8  | Webhook verification accepts a valid signature over the **raw body**, and rejects a tampered body, a wrong secret, and a malformed signature (without throwing). |
+| S8  | Webhook verification accepts a valid signature over the **raw body**, and rejects a tampered body, a wrong secret, and a malformed signature (without throwing). Additionally, it NEVER raises on any input: invalid UTF-8 payload bytes, unparseable JSON, empty body, or missing timestamp all return `false`. |
 | S9  | All signature comparisons use a constant-time, length-guarded comparison primitive — never an ordinary string/`==` comparison on the digest. |
 | S10 | The transport **rejects a success response whose signature is missing** (fail-closed, per D15). It must not return the data. |
 | S11 | The transport **rejects a success response whose signature is invalid**, and accepts one whose signature is valid. |

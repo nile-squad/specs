@@ -28,6 +28,9 @@ Part of the [Nylon Pay SDK Spec](./spec.md).
 22. The PaymentInstance makes at most one status request in flight at a time, and adds a random jitter to each poll interval so concurrent instances do not synchronise their requests.
 23. Webhook verification is replay-protected (D16): after the HMAC verifies, the timestamp inside the signed body must be within the tolerance window (default 300s) or verification fails. The freshness anchor is the signed timestamp, never an unsigned header, so it cannot be refreshed without the secret. A `0` tolerance disables the check.
 24. Every `SdkError.message` surfaced to a merchant is humanized: it states the outcome in plain language with no internal mechanics (no `polling`, `nonce`, `HMAC`/signature verification, library or internal field names, or raw error/stack dumps) and renders any time or duration in human units, never raw milliseconds or ISO timestamps. The machine-readable signal lives in `category`/`retryable`; the message is for a person. See [Error Categories — Message style](./errors.md#message-style--humanized-no-internal-mechanics).
+25. Optional fields with absent values are omitted from the wire JSON, never serialized as `null`. The canonical payload is the JCS form of the serialized body, so `null` and absent are distinct signed values and MUST match the server's expectation.
+26. The transport enforces a maximum response body size (default 10 MB). Responses exceeding the limit are rejected as an `internal` error before the body is fully buffered or signature verification begins.
+27. The factory singleton cache MUST be thread-safe. Concurrent calls to `createNylonPay` (or language equivalent) with the same credentials MUST NOT produce duplicate instances or corrupt the cache. Languages with a shared-memory concurrency model MUST use a mutex/lock/atomic around the cache lookup-and-store.
 
 ## Prohibitions
 

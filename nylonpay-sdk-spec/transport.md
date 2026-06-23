@@ -43,6 +43,14 @@ The SDK maps each public operation to a service/action pair:
 | `verifyPhone` | `sdk` | `sdk-verify-phone` |
 | `createInvoice` | `sdk` | `sdk-create-invoice` |
 
+### Wire Serialization Rules
+
+Optional fields whose value is absent (None/null/undefined) MUST be omitted from
+the JSON body entirely — they MUST NOT be serialized as `null`. The canonical
+payload for signing (JCS, see Request Signing) operates on the serialized body,
+so sending `null` where an absent field is expected changes the signed content
+and breaks signature verification.
+
 ### Action Payloads
 
 What the backend's `sdk` service accepts per action, as enforced by its validation
@@ -260,6 +268,18 @@ The server signs every response to prevent tampering:
 - SDK recomputes `HMAC-SHA256(apiSecret, canonicalPayload)` over the remaining payload
 - SDK compares the computed signature against the received signature using constant-time comparison
 - Mismatch = tampered response = error
+
+### Response Size Bounds
+
+The SDK MUST enforce a maximum response body size. Responses whose body exceeds
+the configured limit MUST be rejected as an `internal` error before signature
+verification begins — the data is never read into memory beyond the limit. The
+default limit is 10 MB. The limit MAY be configurable.
+
+Rationale: response bodies are signed in full for verification. Without a size
+bound, an oversized response could exhaust SDK memory during the read phase,
+before signature verification ever runs. The limit prevents a server-side or
+MITM resource-exhaustion attack against the SDK consumer.
 
 ### Retry Policy
 
