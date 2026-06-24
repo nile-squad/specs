@@ -2,7 +2,7 @@
 
 Part of the [Nylon Pay SDK Spec](./spec.md).
 
-The SDK exposes eight operations and one utility:
+The SDK exposes ten operations and one utility:
 
 | Operation | Pattern | Description |
 |-----------|---------|-------------|
@@ -12,6 +12,8 @@ The SDK exposes eight operations and one utility:
 | `makePayoutAndResolve` | Sync (blocking) | Initiate a disbursement and block until terminal state |
 | `getStatus` | Sync | One-shot status check for a transaction by reference |
 | `getTransaction` | Sync | Look up a full transaction record by id or reference |
+| `listTransactions` | Sync | List transactions with optional filters including tags |
+| `getTransactionsByTag` | Sync | Shorthand for filtering transactions by a single tag |
 | `verifyPhone` | Sync | Pre-validate a phone number |
 | `createInvoice` | Sync | Generate a hosted payment link with optional line items |
 | `verifyWebhookSignature` | Utility | Verify HMAC signature of an incoming webhook payload |
@@ -32,6 +34,7 @@ Input shape:
 - `reference?` — merchant-supplied idempotency key (auto-generated if omitted). When supplied, it MUST be 13–15 characters (see [Reference constraints](#reference-constraints)).
 - `method?` — payment method: `"mobileMoney"` or `"bank"` (defaults to `"mobileMoney"`)
 - `bank?` — required when `method` is `"bank"`: `{ accountNumber, bankName }`
+- `tags?` — up to 10 labels attached to the transaction for filtering and reporting. See [Smart Tags](#smart-tags).
 - `metadata?` — arbitrary key-value pairs attached to the transaction
 
 Returns: `PaymentInstance`
@@ -85,6 +88,7 @@ Input shape:
 - `destination` — `{ accountHolderName, accountNumber, bankName?, phone? }`
 - `description` — narration
 - `reference?` — idempotency key; when supplied, MUST be 13–15 characters (see [Reference constraints](#reference-constraints))
+- `tags?` — up to 10 labels. See [Smart Tags](#smart-tags).
 - `metadata?` — arbitrary key-value pairs
 
 Returns: `PaymentInstance`
@@ -118,6 +122,46 @@ At least one of `id` or `reference` is required.
 
 Returns: full transaction record (see [Transaction Shape](./types.md#transaction-shape))
 
+### listTransactions
+
+Returns a paginated list of transactions for the authenticated account, with optional filters.
+
+Input shape (`ListTransactionsInput` — all fields optional):
+- `tags?` — array of tag strings. Uses **AND semantics**: only transactions carrying **all** listed tags are returned.
+- `status?` — filter by status: `"pending"`, `"processing"`, `"successful"`, `"failed"`, `"cancelled"`
+- `type?` — filter by type: `"collection"`, `"payout"`, `"invoice"`
+- `limit?` — results per page, 1–100 (default `20`)
+- `offset?` — zero-based pagination offset (default `0`)
+- `createdAfter?` — ISO 8601 datetime — earliest creation time (inclusive)
+- `createdBefore?` — ISO 8601 datetime — latest creation time (inclusive)
+
+Returns: `ListTransactionsResponse` — `{ transactions: TransactionSummary[], count, limit, offset, tags }`
+
+`count` is the total number of matching transactions (useful for pagination). `tags` echoes the filter tags applied.
+
+### getTransactionsByTag
+
+Shorthand for filtering by a single tag. Accepts one required `tag` argument plus any `ListTransactionsInput` options except `tags`.
+
+Equivalent to `listTransactions({ tags: [tag], ...options })`.
+
+Returns: `ListTransactionsResponse`
+
+### Smart Tags
+
+Tags are short labels attached to a transaction at creation time. They persist on the transaction record and can be used to filter or group transactions by campaign, product, team, channel, or any merchant-defined dimension.
+
+**Normalization** — applied by the backend at write time:
+- Lowercased and whitespace-trimmed
+- Characters outside `[a-z0-9\-_:.]` are rejected (tag is dropped)
+- Max 50 characters per tag; longer tags are dropped
+- Max 10 tags per transaction; extras beyond the first 10 are dropped
+- Duplicates removed after normalization
+
+**Reserved tags** — `"live"` and `"test"` are set automatically to mark the transaction mode. Passing either in `tags` has no effect.
+
+**Filter semantics** — `listTransactions({ tags: ["a", "b"] })` returns only transactions that carry **both** `"a"` and `"b"`, not either.
+
 ### verifyPhone
 
 Pre-validates a phone number with the payment provider. Returns the registered name on the account.
@@ -141,6 +185,7 @@ Input shape:
 - `items?` — array of `{ name, quantity, unitPrice }` (max 50 items)
 - `redirectUrl?` — URL to redirect customer after payment
 - `reference?` — idempotency key; when supplied, MUST be 13–15 characters (see [Reference constraints](#reference-constraints))
+- `tags?` — up to 10 labels. See [Smart Tags](#smart-tags).
 - `metadata?` — arbitrary key-value pairs
 
 Returns: `{ id, url, token, expiresAt, status }`

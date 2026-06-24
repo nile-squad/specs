@@ -174,6 +174,7 @@ type CollectPaymentInput = {
   reference?: string;
   method?: PaymentMethod;
   bank?: BankDetails;
+  tags?: string[];
   metadata?: Record<string, string>;
 };
 
@@ -184,6 +185,7 @@ type MakePayoutInput = {
   destination: Destination;
   description: string;
   reference?: string;
+  tags?: string[];
   metadata?: Record<string, string>;
 };
 
@@ -208,7 +210,40 @@ type CreateInvoiceInput = {
   items?: InvoiceItem[];
   redirectUrl?: string;
   reference?: string;
+  tags?: string[];
   metadata?: Record<string, string>;
+};
+
+type ListTransactionsInput = {
+  tags?: string[];
+  status?: TransactionStatus;
+  type?: "collection" | "payout" | "invoice";
+  limit?: number;   // 1–100, default 20
+  offset?: number;  // default 0
+  createdAfter?: string;  // ISO 8601
+  createdBefore?: string; // ISO 8601
+};
+
+type TransactionSummary = {
+  id: string;
+  reference: string;
+  amount: number;
+  currency: Currency;
+  status: TransactionStatus;
+  type: TransactionType;
+  method: string | null;
+  mode: TransactionMode;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+type ListTransactionsResponse = {
+  transactions: TransactionSummary[];
+  count: number;
+  limit: number;
+  offset: number;
+  tags: string[];
 };
 
 type VerifyWebhookInput = {
