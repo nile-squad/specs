@@ -202,7 +202,7 @@ is not a replay.
 
 Input shape:
 - `payload` — raw request body (string or bytes, depending on language)
-- `signature` — signature from the webhook header
+- `signature` — value of the `x-nylon-signature` HTTP request header
 - `secret` — merchant's webhook secret
 - `toleranceSeconds` — optional replay-protection window (default `300`). MUST be >= 0. Set to
   `0` to disable the freshness check. Negative values are rejected (verification returns `false`).

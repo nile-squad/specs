@@ -35,7 +35,7 @@ Every SDK must test the following edge cases:
 - `getTransaction` with neither `id` nor `reference`
 - `getTransaction` with both `id` and `reference`
 - `collectPayment` with `method: "bank"` but missing `bank` field
-- `createInvoice` with zero items or items with negative quantity/unitPrice
+- `createInvoice` with zero items or items with negative quantity/amount
 
 **Network and transport:**
 - Connection timeout (server unreachable)

@@ -36,13 +36,10 @@ type PaymentEvent =
   | "error";
 
 type WebhookEventType =
-  | "collection.completed"
-  | "collection.failed"
-  | "payout.completed"
-  | "payout.failed"
-  | "payout.reversed"
-  | "refund.completed"
-  | "chargeback.received";
+  | "transaction.successful"
+  | "transaction.failed"
+  | "transaction.processing"
+  | "transaction.cancelled";
 
 type Currency = "USD" | "EUR" | "GBP" | "KES" | "UGX" | "TZS" | "RWF";
 
@@ -306,10 +303,36 @@ type InvoiceResponse = {
 };
 
 type WebhookPayload = {
+  /** Backend delivery id (`buildDeliveryBody` field name; snake_case on the wire). */
+  delivery_id: string;
   event: WebhookEventType;
-  data: Transaction;
+  payload: WebhookTransactionSnapshot;
   timestamp: string;
-  signature: string;
+};
+```
+
+### WebhookTransactionSnapshot
+
+Merchant-facing transaction record delivered inside a webhook payload. Field
+names match the wire JSON exactly (camelCase in both TypeScript and Python)
+because merchants type their `JSON.parse()` / `json.loads()` output against
+this directly — it is NOT passed through the SDK's snake_case ↔ camelCase
+wire conversion.
+
+```typescript
+type WebhookTransactionSnapshot = {
+  transactionId: string;
+  reference: string;
+  /** Decimal-string amount (matches backend wire JSON). */
+  amount: string;
+  currency: string;
+  status: TransactionStatus;
+  previousStatus: TransactionStatus;
+  type: TransactionType;
+  method: PaymentMethod;
+  mode: TransactionMode;
+  failureReason: string | null;
+  operatorTid: string | null;
 };
 ```
 
@@ -319,19 +342,16 @@ The transaction record returned by `getTransaction`, `wait()`, and event handler
 
 ## Webhook Event Catalog
 
-Events are delivered as POST requests to the merchant's configured webhook URL. Each event has a `type` field identifying the event and a `data` field containing the relevant transaction record.
+Events are delivered as POST requests to the merchant's configured webhook URL. The body carries a `payload` field (not `data`) holding the merchant-facing transaction record. The signature does NOT live in the body — it travels in the `x-nylon-signature` HTTP header.
 
 | Event Type | Trigger |
 |------------|---------|
-| `collection.completed` | A collection transaction reaches `successful` status |
-| `collection.failed` | A collection transaction reaches `failed` status |
-| `payout.completed` | A payout transaction reaches `successful` status |
-| `payout.failed` | A payout transaction reaches `failed` status |
-| `payout.reversed` | A failed payout is reversed by the system |
-| `refund.completed` | A refund transaction is processed successfully |
-| `chargeback.received` | A chargeback is initiated by a bank or provider |
+| `transaction.successful` | A transaction reaches `successful` status |
+| `transaction.failed` | A transaction reaches `failed` status |
+| `transaction.processing` | A transaction is mid-flight (rare; mostly for in-flight dashboards) |
+| `transaction.cancelled` | A transaction is cancelled before reaching a terminal state |
 
-**Webhook payload shape:** See `WebhookPayload` type above.
+**Webhook payload shape:** See `WebhookPayload` and `WebhookTransactionSnapshot` types above.
 
 **Delivery guarantees:**
 - At-least-once delivery with exponential backoff retries

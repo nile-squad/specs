@@ -122,10 +122,14 @@ accept exactly the same payload as their base actions.
 |-------|------|----------|------------|
 | `amount` | number | yes | minimum 500 UGX |
 | `currency` | string | no | defaults to `"UGX"` |
-| `description` | string | yes | |
-| `items[]` | array | no | max 50 of `{ name: string, quantity: number > 0, unitPrice: number > 0 }` |
-| `redirectUrl` | string | no | must be a valid URL |
-| `reference` | string | no | 13–15 characters |
+| `customerEmail` | string | yes | |
+| `customerName` | string | no | |
+| `customerPhone` | string | no | validated and normalized to international format (`256XXXXXXXXX`) |
+| `description` | string | no | |
+| `dueDate` | string | no | |
+| `items[]` | array | no | max 50 of `{ name: string, quantity: number > 0, amount: number > 0 }` |
+| `merchantReference` | string | no | 13–15 characters |
+| `tags[]` | array | no | |
 | `metadata` | object | no | string keys to string values; defaults to `{}` |
 
 Invoices are live-mode only: calling `sdk-create-invoice` with a sandbox (test-mode)
