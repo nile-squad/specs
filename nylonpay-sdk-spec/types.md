@@ -158,7 +158,7 @@ type Destination = {
 type InvoiceItem = {
   name: string;
   quantity: number;
-  unitPrice: number;
+  amount: number;
 };
 
 type BankDetails = {
@@ -206,10 +206,13 @@ type VerifyPhoneInput = {
 type CreateInvoiceInput = {
   amount: number;
   currency: Currency;
-  description: string;
+  customerEmail: string;
+  customerName?: string;
+  customerPhone?: string;
+  description?: string;
+  dueDate?: string;
   items?: InvoiceItem[];
-  redirectUrl?: string;
-  reference?: string;
+  merchantReference?: string;
   tags?: string[];
   metadata?: Record<string, string>;
 };
@@ -295,10 +298,11 @@ type PhoneVerification = {
 
 type InvoiceResponse = {
   id: string;
-  url: string;
-  token: string;
-  expiresAt: string;
-  status: "pending";
+  invoiceNumber: string;
+  paymentLink: string;
+  amount: string;
+  currency: string;
+  status: string;
 };
 
 type WebhookPayload = {

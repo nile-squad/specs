@@ -176,41 +176,24 @@ Returns: `{ phoneNumber, customerName, verified }`
 
 ### createInvoice
 
-Generates a hosted payment link. The link renders a payment page where the customer completes the transaction.
+Generates a hosted invoice and emails it to the customer. The returned payment link directs the customer to a mobile-money checkout page.
 
 Input shape:
-- `amount` — positive integer
+- `amount` — positive integer in smallest currency unit
 - `currency` — ISO 4217
-- `description` — invoice narration
-- `items?` — array of `{ name, quantity, unitPrice }` (max 50 items)
-- `redirectUrl?` — URL to redirect customer after payment
-- `reference?` — idempotency key; when supplied, MUST be 13–15 characters (see [Reference constraints](#reference-constraints))
+- `customerEmail` — required; invoice is sent to this address
+- `customerName?` — display name shown on the invoice
+- `customerPhone?` — pre-fills the phone field on the payment page
+- `description?` — invoice narration
+- `dueDate?` — ISO 8601 date string (e.g. `"2025-12-31"`)
+- `items?` — array of `{ name, quantity, amount }` (max 50 items)
+- `merchantReference?` — stored on the transaction for reconciliation
 - `tags?` — up to 10 labels. See [Smart Tags](#smart-tags).
 - `metadata?` — arbitrary key-value pairs
 
-Returns: `{ id, url, token, expiresAt, status }`
+Returns: `{ id, invoiceNumber, paymentLink, amount, currency, status }`
 
-**Hosted Payment Page:**
-
-The generated `url` points to a hosted payment page where the customer completes the transaction. The page supports:
-
-- **Mobile Money** — customer enters phone number, receives payment prompt on phone
-- **Card** — customer enters card details, may be redirected to card issuer for 3D Secure
-- **Bank Transfer** — customer selects bank and enters account number
-
-**Line Items:**
-
-When `items` are provided, the payment page displays an itemized breakdown (name, quantity, unit price) alongside the total amount. This gives customers visibility into what they're paying for.
-
-**Redirect Behavior:**
-
-When `redirectUrl` is provided, the customer is redirected to that URL after successful payment. For card payments, the customer may first be redirected to the card issuer's 3D Secure page, then to your `redirectUrl` after verification.
-
-**Payment URL Format:**
-
-The `url` field follows the pattern: `{frontendUrl}/pay?token={token}`
-
-The token is a unique identifier for the payment link. Tokens expire after 24 hours by default.
+The customer receives an email containing the `paymentLink`. Opening it shows a mobile-money payment page where the customer enters their phone number to complete the payment. A receipt email is sent automatically after a successful payment.
 
 ### verifyWebhookSignature
 
