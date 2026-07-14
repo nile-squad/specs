@@ -1,6 +1,6 @@
 # Nylon Pay SDK Spec
 
-**Version:** 1.3.0
+**Version:** 1.4.0
 
 > Canonical, language-agnostic specification for the Nylon Pay SDK. Implement it
 > in any language; the [TypeScript SDK](https://github.com/nile-squad/nylonpay-ts)
@@ -54,7 +54,7 @@ Transport, Invariants, and Prohibitions.
 |----------|--------|----------------------|
 | TypeScript | **Available** — reference implementation | [`@nile-squad/nylonpay-ts`](https://github.com/nile-squad/nylonpay-ts) |
 | C# | In progress | — |
-| Python | Planned | — |
+| Python | **Available** | [`nylonpay-py`](https://github.com/nile-squad/nylonpay-py) |
 | Go | Planned | — |
 | Rust | Planned | — |
 | PHP | Planned | — |

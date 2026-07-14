@@ -91,8 +91,12 @@ type NylonPayConfig = {
   timeoutMs?: number;
   maxRetries?: number;
   maxPollIntervalMs?: number;
+  /** Optional cap. When omitted, wait() polls until terminal. */
   maxPollDurationMs?: number;
+  /** Optional cap. When omitted, wait() polls until terminal. */
   maxPollAttempts?: number;
+  /** When a polled payment reports delayed: true — "wait" (default) keeps polling; "return" resolves with the still-pending payment. */
+  onDelayed?: "wait" | "return";
   /** Custom fetch implementation. Defaults to `globalThis.fetch`. Essential for edge runtimes and testing. */
   fetch?: typeof globalThis.fetch;
   /** Force a new instance even if one already exists for this key+secret+url. Defaults to `false`. See D11. */
@@ -277,6 +281,8 @@ type Transaction = {
   mode: TransactionMode;
   createdAt: string;
   updatedAt: string;
+  /** True when the payment has been in a non-terminal state longer than the delayed threshold (~3 minutes). Not a status value. */
+  delayed?: boolean;
 };
 
 type StatusResponse = {
@@ -285,6 +291,8 @@ type StatusResponse = {
   amount: number;
   currency: Currency;
   updatedAt: string;
+  /** True when the payment has been in a non-terminal state longer than the delayed threshold (~3 minutes). Not a status value. */
+  delayed?: boolean;
 };
 
 type PhoneVerification = {

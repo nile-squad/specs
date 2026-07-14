@@ -63,8 +63,11 @@ Every SDK must test the following edge cases:
 - Status transitions: `pending` → `failed` with failure reason
 - Status transitions: `pending` → `cancelled`
 - Reference mismatch on second poll (server returns different reference)
-- Polling timeout (max attempts exhausted)
-- Polling timeout (max duration exhausted)
+- Polling timeout (max attempts exhausted) — only when merchant sets `maxPollAttempts`
+- Polling timeout (max duration exhausted) — only when merchant sets `maxPollDurationMs`
+- Delayed flag with `onDelayed: "return"` resolves with still-pending transaction
+- Delayed flag with `onDelayed: "wait"` (default) continues until terminal
+- `collectPaymentAndResolve` / `makePayoutAndResolve` continue client polling when server returns non-terminal
 - Network error during polling (after first successful poll)
 - Calling `wait()` after terminal state already reached
 - Calling `off()` for a handler that was never registered

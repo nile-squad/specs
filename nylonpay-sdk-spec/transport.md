@@ -303,6 +303,8 @@ A PaymentInstance tracks status transitions by repeatedly calling the one-shot s
 - **Single-flight.** Only one status request is in flight per instance. The next poll is scheduled only after the current one resolves, so requests never overlap.
 - **Jittered interval.** Each interval is the configured poll interval plus a small random jitter, so a fleet of concurrent instances does not synchronise into a thundering herd against the status endpoint.
 - **De-duplication.** A status update that matches the instance's current status emits no event. Only a transition (`prev !== next`) emits.
-- **Terminal stop.** On any terminal state the instance fetches the full transaction record, emits the terminal event, and stops. The max-attempt and max-duration caps bound a non-terminating transaction.
+- **Terminal stop.** On any terminal state the instance fetches the full transaction record, emits the terminal event, and stops. Optional `maxPollAttempts` and `maxPollDurationMs` caps bound a non-terminating transaction when the merchant sets them.
+- **Delayed flag.** Status responses may include `delayed: true` when a payment has been non-terminal for more than ~3 minutes. When `onDelayed` is `"return"`, the instance resolves with the still-pending transaction; when `"wait"` (default), polling continues.
+- **Backoff.** For the first two minutes, each interval is the configured poll interval plus jitter. After that, the interval doubles every two minutes up to a 15s cap.
 - **Late-update guard.** Once an instance has resolved (terminal, error, or timeout) it emits no further events; an in-flight poll that resolves after that point is ignored.
 

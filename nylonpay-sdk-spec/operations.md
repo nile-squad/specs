@@ -69,7 +69,7 @@ there is no separate idempotency key.
 
 ### collectPaymentAndResolve
 
-Initiates a payment collection and blocks until the transaction reaches a terminal state. Equivalent to calling `collectPayment` then `wait()`, but provided as a single operation for convenience in synchronous contexts.
+Initiates a payment collection and blocks until the transaction reaches a terminal state. Equivalent to calling `collectPayment` then `wait()`, but provided as a single operation for convenience in synchronous contexts. When the server's inline poll budget (~60s) ends still pending, the SDK continues client-side status polling until terminal (or merchant caps / `onDelayed: "return"`).
 
 Input shape: same as `collectPayment`.
 
@@ -95,7 +95,7 @@ Returns: `PaymentInstance`
 
 ### makePayoutAndResolve
 
-Initiates a disbursement and blocks until the payout reaches a terminal state. Equivalent to calling `makePayout` then `wait()`, but provided as a single operation for convenience in synchronous contexts.
+Initiates a disbursement and blocks until the payout reaches a terminal state. Equivalent to calling `makePayout` then `wait()`, but provided as a single operation for convenience in synchronous contexts. When the server's inline poll budget ends still pending, the SDK continues client-side status polling until terminal (or merchant caps / `onDelayed: "return"`).
 
 Input shape: same as `makePayout`.
 
@@ -108,7 +108,7 @@ One-shot status check. Does not poll. Returns the current transaction state.
 Input shape:
 - `reference` — transaction reference
 
-Returns: `{ reference, status, amount, currency, updatedAt }`
+Returns: `{ reference, status, amount, currency, updatedAt, delayed? }`
 
 ### getTransaction
 

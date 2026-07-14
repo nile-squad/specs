@@ -5,7 +5,7 @@ Part of the [Nylon Pay SDK Spec](./spec.md).
 ## Invariants
 
 1. Every SDK operation routes through the signed transport layer. No operation bypasses signing.
-2. The PaymentInstance stops polling on any terminal event (`success`, `failed`, `cancelled`, `error`). It never polls indefinitely.
+2. The PaymentInstance stops polling on any terminal event (`success`, `failed`, `cancelled`, `error`), on merchant-configured poll caps, or when `onDelayed: "return"` resolves a delayed still-pending payment. By default it polls until terminal.
 3. The canonical payload in signing is the JCS (RFC 8785) form: object keys sorted by Unicode code point (never a locale-sensitive comparison), arrays left in order, JCS number/string serialization. Two identical payloads produce identical canonical strings on every runtime and locale, regardless of field insertion order (D17).
 4. Response signature verification uses constant-time comparison. Timing attacks on signature validation are not possible.
 5. The factory validates configuration eagerly. An SDK instance with invalid credentials cannot be constructed.
