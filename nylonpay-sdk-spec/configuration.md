@@ -26,8 +26,8 @@ does not move real money; a live key processes real transactions. The SDK has no
 | `maxPollAttempts` | *(none — poll until terminal)* |
 | `onDelayed` | `"wait"` |
 
-**Behavior change (v1.4):** Prior versions defaulted to a ~5 minute polling cap
-(`maxPollDurationMs: 300000`, `maxPollAttempts: 150`). From v1.4 onward, `wait()`
+**Behavior change (v1.5):** Prior versions defaulted to a ~5 minute polling cap
+(`maxPollDurationMs: 300000`, `maxPollAttempts: 150`). From v1.5 onward, `wait()`
 and `*AndResolve` poll until the transaction reaches a terminal state unless the
 merchant sets those caps. Set `maxPollDurationMs` and/or `maxPollAttempts` to
 restore bounded waits, or `onDelayed: "return"` to hand back a still-pending

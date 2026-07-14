@@ -1,6 +1,6 @@
 # Nylon Pay SDK Spec
 
-**Version:** 1.4.0
+**Version:** 1.5.0
 
 > Canonical, language-agnostic specification for the Nylon Pay SDK. Implement it
 > in any language; the [TypeScript SDK](https://github.com/nile-squad/nylonpay-ts)
