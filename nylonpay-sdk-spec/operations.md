@@ -128,7 +128,7 @@ Returns a paginated list of transactions for the authenticated account, with opt
 
 Input shape (`ListTransactionsInput` — all fields optional):
 - `tags?` — array of tag strings. Uses **AND semantics**: only transactions carrying **all** listed tags are returned.
-- `status?` — filter by status: `"pending"`, `"processing"`, `"successful"`, `"failed"`, `"cancelled"`
+- `status?` — filter by status: `"pending"`, `"processing"`, `"on_hold"`, `"successful"`, `"failed"`, `"cancelled"`
 - `type?` — filter by type: `"collection"`, `"payout"`, `"invoice"`
 - `limit?` — results per page, 1–100 (default `20`)
 - `offset?` — zero-based pagination offset (default `0`)

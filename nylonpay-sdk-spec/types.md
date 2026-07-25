@@ -10,9 +10,19 @@ TypeScript types are used below as the reference notation. Each language defines
 type TransactionStatus =
   | "pending"
   | "processing"
+  | "on_hold"
   | "successful"
   | "failed"
   | "cancelled";
+
+/**
+ * Lifecycle states a transaction can occupy. Merchants use these to drive
+ * fulfillment logic: trigger order completion on "successful", notify
+ * customer on "failed", release inventory on "cancelled".
+ *
+ * Non-terminal statuses: "pending", "processing", "on_hold" (review-stage payouts).
+ * Terminal statuses: "successful", "failed", "cancelled".
+ */
 
 type TransactionType =
   | "collection"
@@ -277,6 +287,13 @@ type Transaction = {
   phone: string;
   email: string | null;
   failureReason: string | null;
+  /**
+   * Humanized status description. For `on_hold` statuses, this provides
+   * a plain-language explanation (e.g., "Payout is being reviewed and will
+   * complete shortly"). For failed transactions, this is typically the same
+   * as `failureReason`. Populated by the backend when available.
+   */
+  statusText?: string;
   metadata: Record<string, string>;
   mode: TransactionMode;
   createdAt: string;
@@ -290,6 +307,12 @@ type StatusResponse = {
   status: TransactionStatus;
   amount: number;
   currency: Currency;
+  /**
+   * Humanized status description. For `on_hold` statuses, this provides
+   * a plain-language explanation (e.g., "Payout is being reviewed and will
+   * complete shortly"). Populated by the backend when available.
+   */
+  statusText?: string;
   updatedAt: string;
   /** True when the payment has been in a non-terminal state longer than the delayed threshold (~3 minutes). Not a status value. */
   delayed?: boolean;
@@ -341,6 +364,8 @@ type WebhookTransactionSnapshot = {
   mode: TransactionMode;
   failureReason: string | null;
   operatorTid: string | null;
+  /** Humanized status description (e.g., for `on_hold` reviews). */
+  statusText?: string;
 };
 ```
 
