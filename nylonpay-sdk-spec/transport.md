@@ -179,12 +179,14 @@ Success response (HTTP `200`):
     "status": "pending",
     "transactionId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
     "createdAt": "2026-06-11T09:30:00.000Z",
+    "_requestNonce": "3f9c1a7e5b2d48c6a0e8f4b1d7c92e50",
     "_responseSignature": "<hex HMAC-SHA256 over data minus this field>"
   }
 }
 ```
 
-The SDK verifies `_responseSignature`, strips it, and returns the rest of `data` to
+The SDK verifies `_responseSignature`, checks that `_requestNonce` matches the
+`x-nylon-nonce` it sent, strips both, and returns the rest of `data` to
 the merchant. The transaction starts at `"pending"`; the PaymentInstance polls
 `sdk-get-status` with the reference until a terminal status.
 
@@ -265,13 +267,22 @@ order or where they were serialized.
 
 ### Response Verification
 
-The server signs every response to prevent tampering:
+The server signs every response to prevent tampering, and binds it to the
+request that solicited it (D21):
 
 - Response body includes a `_responseSignature` field
+- Response body includes a `_requestNonce` field — the nonce from the request being answered, covered by the signature
 - SDK strips the `_responseSignature` field from the response
-- SDK recomputes `HMAC-SHA256(apiSecret, canonicalPayload)` over the remaining payload
+- SDK recomputes `HMAC-SHA256(apiSecret, canonicalPayload)` over the remaining payload (which still includes `_requestNonce`)
 - SDK compares the computed signature against the received signature using constant-time comparison
 - Mismatch = tampered response = error
+- SDK then requires `_requestNonce` to equal the nonce it sent in `x-nylon-nonce`; a missing or different value is an `internal` error
+- SDK strips `_requestNonce` before returning data to the caller
+
+The signature alone proves who produced a response, not which call it answers.
+Without the nonce binding, any response the server ever legitimately produced
+stays validly signed forever and can be replayed onto a later request for the
+same reference.
 
 ### Response Size Bounds
 
@@ -279,6 +290,12 @@ The SDK MUST enforce a maximum response body size. Responses whose body exceeds
 the configured limit MUST be rejected as an `internal` error before signature
 verification begins — the data is never read into memory beyond the limit. The
 default limit is 10 MB. The limit MAY be configurable.
+
+The cap MUST be enforced **while the body is read**, against a running byte
+count, aborting as soon as it is exceeded. Checking a `Content-Length` header
+alone does NOT satisfy this: it cannot bound peak memory if the HTTP client has
+already buffered the body, and it is a no-op entirely when the server sends no
+length (chunked transfer).
 
 Rationale: response bodies are signed in full for verification. Without a size
 bound, an oversized response could exhaust SDK memory during the read phase,

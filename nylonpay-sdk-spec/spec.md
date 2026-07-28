@@ -1,6 +1,6 @@
 # Nylon Pay SDK Spec
 
-**Version:** 1.5.0
+**Version:** 2.0.0
 
 > Canonical, language-agnostic specification for the Nylon Pay SDK. Implement it
 > in any language; the [TypeScript SDK](https://github.com/nile-squad/nylonpay-ts)
@@ -26,9 +26,9 @@ document is self-contained for its topic and links back here.
 | [Transport Contract](./transport.md) | Endpoint, request envelope, per-action payload validation, a worked request/response example, signing, and response verification |
 | [Error Categories](./errors.md) | The fixed error taxonomy and how categories travel on the wire |
 | [Configuration](./configuration.md) | Factory configuration: keys, base URL, timeouts, hooks |
-| [Implementation Requirements](./implementation-requirements.md) | Unit, integration (I1–I19), and security (S1–S14) test suites; spec compliance rules |
+| [Implementation Requirements](./implementation-requirements.md) | Unit, integration (I1–I19), and security (S1–S18) test suites; spec compliance rules |
 | [Invariants and Prohibitions](./invariants-and-prohibitions.md) | The numbered guarantees every implementation upholds and the things no SDK ever does |
-| [Decision Records](./decision-records.md) | D1–D17: why the contract is the way it is |
+| [Decision Records](./decision-records.md) | D1–D21: why the contract is the way it is |
 | [Follow-Up Work](./follow-up-work.md) | F1–F7: deferred scope and resolved findings |
 
 ## How to Read This Spec

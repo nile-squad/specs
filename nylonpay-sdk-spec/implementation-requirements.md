@@ -22,7 +22,7 @@ Every SDK must ship a test suite covering:
 - PaymentInstance lifecycle (events, polling, terminal states, timeout, reference mismatch)
 - Retry behavior (retryable status codes, non-retryable status codes, backoff timing)
 - Webhook signature verification (valid, invalid, tampered, stale/replayed)
-- The canonical Security Test suite (S1–S14, see §Security Tests) — required, not optional
+- The canonical Security Test suite (S1–S18, see §Security Tests) — required, not optional
 
 ### Edge Case Testing
 
@@ -80,7 +80,7 @@ Every SDK must test the following edge cases:
 
 ### Security Tests
 
-Every SDK implementation **MUST** ship a dedicated security test suite covering the canonical cases below. These are the cross-language contract for the SDK's cryptographic surface; IDs (S1–S14) are traceable from this document to each SDK's test code. They run with mocked transport — no network required.
+Every SDK implementation **MUST** ship a dedicated security test suite covering the canonical cases below. These are the cross-language contract for the SDK's cryptographic surface; IDs (S1–S18) are traceable from this document to each SDK's test code. They run with mocked transport — no network required.
 
 | ID  | Requirement |
 |-----|-------------|
@@ -98,6 +98,10 @@ Every SDK implementation **MUST** ship a dedicated security test suite covering 
 | S12 | Config construction rejects an `apiKey` without the `npk_` prefix and an `apiSecret` without the `nps_` prefix. |
 | S13 | The API secret never appears on the SDK's public/serialized surface, and the instance cache is secret-aware (rotating the secret yields a different instance — it is never reused under a stale secret). |
 | S14 | Webhook verification is replay-protected: a correctly-signed but **stale** webhook (signed timestamp older than the tolerance window) is **rejected**, a fresh one is accepted, a valid signature carrying **no timestamp fails closed**, and swapping in a fresh timestamp while keeping the captured signature is rejected (the timestamp is signed, so it cannot be refreshed without the secret). |
+| S15 | Response replay is rejected: a response whose signature verifies but whose echoed `_requestNonce` does not match the nonce just sent is rejected as `internal`, and so is one that omits the field. A response captured from an earlier legitimate call MUST NOT satisfy a later request for the same reference. |
+| S16 | Signatures are accepted in one canonical form only: a correctly-computed signature re-spelled in uppercase hex is rejected. Verifying by comparing decoded bytes is case-blind and does not satisfy this. |
+| S17 | The response size cap is enforced during the read: an oversized body is rejected both when the server declares an oversized `Content-Length` AND when it sends no length at all (chunked), with the read aborted rather than completed-then-discarded. |
+| S18 | `0` tolerance is strict, not disabled: a stale webhook with `tolerance = 0` is rejected, and only the explicit disable sentinel accepts it. |
 
 ### Integration Tests
 
