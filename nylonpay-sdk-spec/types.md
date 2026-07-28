@@ -169,7 +169,8 @@ type Destination = {
 type InvoiceItem = {
   name: string;
   quantity: number;
-  amount: number;
+  /** Price per unit, smallest currency unit. Wire field: `unitPrice`. */
+  unitPrice: number;
 };
 
 type BankDetails = {

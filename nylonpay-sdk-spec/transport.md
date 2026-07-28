@@ -127,7 +127,7 @@ accept exactly the same payload as their base actions.
 | `customerPhone` | string | no | validated and normalized to international format (`256XXXXXXXXX`) |
 | `description` | string | no | |
 | `dueDate` | string | no | |
-| `items[]` | array | no | max 50 of `{ name: string, quantity: number > 0, amount: number > 0 }` |
+| `items[]` | array | no | max 50 of `{ name: string, quantity: number > 0, unitPrice: number > 0 }` |
 | `merchantReference` | string | no | 13–15 characters |
 | `tags[]` | array | no | |
 | `metadata` | object | no | string keys to string values; defaults to `{}` |

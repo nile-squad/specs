@@ -186,7 +186,7 @@ Input shape:
 - `customerPhone?` — pre-fills the phone field on the payment page
 - `description?` — invoice narration
 - `dueDate?` — ISO 8601 date string (e.g. `"2025-12-31"`)
-- `items?` — array of `{ name, quantity, amount }` (max 50 items)
+- `items?` — array of `{ name, quantity, unitPrice }` (max 50 items)
 - `merchantReference?` — stored on the transaction for reconciliation
 - `tags?` — up to 10 labels. See [Smart Tags](#smart-tags).
 - `metadata?` — arbitrary key-value pairs
