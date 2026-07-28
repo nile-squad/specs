@@ -354,20 +354,27 @@ wire conversion.
 type WebhookTransactionSnapshot = {
   transactionId: string;
   reference: string;
-  /** Decimal-string amount (matches backend wire JSON). */
-  amount: string;
-  currency: string;
+  /**
+   * Decimal-string amount (matches backend wire JSON). Null only when the
+   * backend could not read the transaction record while dispatching.
+   */
+  amount: string | null;
+  currency: string | null;
   status: TransactionStatus;
   previousStatus: TransactionStatus;
-  type: TransactionType;
-  method: PaymentMethod;
-  mode: TransactionMode;
+  /** Null when the transaction has no stored value for the field. */
+  type: TransactionType | null;
+  method: PaymentMethod | null;
+  mode: TransactionMode | null;
   failureReason: string | null;
   operatorTid: string | null;
-  /** Humanized status description (e.g., for `on_hold` reviews). */
-  statusText?: string;
 };
 ```
+
+Every key is always present — the backend sends an explicit null rather than
+omitting one, so the shape a merchant types against never changes. There is no
+`statusText` here: it belongs to the `Transaction` shape, and the statuses it
+describes (`on_hold`, `under_review`) emit no webhook at all.
 
 ## Transaction Shape
 
@@ -386,8 +393,12 @@ Events are delivered as POST requests to the merchant's configured webhook URL. 
 
 **Webhook payload shape:** See `WebhookPayload` and `WebhookTransactionSnapshot` types above.
 
+No other status emits a webhook. A payout parked for review (`on_hold`, `under_review`) stays silent until it resolves to one of the four above. Both collections and payouts use this same catalog — `payload.type` distinguishes them.
+
+**Signature form:** lowercase hex, the one canonical form (see invariant 28). Verification rejects any other spelling.
+
 **Delivery guarantees:**
-- At-least-once delivery with exponential backoff retries
-- Merchants must respond with 2xx within the timeout window
-- Duplicate delivery is possible — merchants must be idempotent (use `reference` for deduplication)
+- At-least-once delivery. Five attempts with exponential backoff over roughly fifteen minutes, then one attempt nightly for up to five further nights before the delivery is retired.
+- Merchants must respond with 2xx within 10 seconds
+- Duplicate delivery is possible — merchants must be idempotent (use `delivery_id` or `reference` for deduplication)
 

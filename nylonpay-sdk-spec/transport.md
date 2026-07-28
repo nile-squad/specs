@@ -258,7 +258,7 @@ order or where they were serialized.
 - `x-nylon-key` — API key (plaintext, starts with `npk_`)
 - `x-nylon-nonce` — 32-character hex nonce (unique per request, from cryptographic random bytes)
 - `x-nylon-timestamp` — millisecond timestamp as string
-- `x-nylon-signature` — computed HMAC signature (hex-encoded)
+- `x-nylon-signature` — computed HMAC signature, **lowercase hex** (the one canonical form; see invariant 28)
 
 **Request body additions:**
 - `_fingerprint` — SHA-256 hash of OS and runtime metadata, injected into every authenticated request body
