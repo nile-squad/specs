@@ -57,7 +57,7 @@ Transport, Invariants, and Prohibitions.
 | Python | **Available** | [`nylonpay-py`](https://github.com/nile-squad/nylonpay-py) |
 | Go | Planned | — |
 | Rust | Planned | — |
-| PHP | Planned | — |
+| PHP | **Available** (alpha) | [`nile-squad/nylonpay-php`](https://github.com/nile-squad/nylonpay-php) |
 | Java | Planned | — |
 | Kotlin | Planned | — |
 | Elixir | Planned | — |
