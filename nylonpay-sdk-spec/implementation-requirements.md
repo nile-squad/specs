@@ -10,7 +10,7 @@ Languages with type systems (TypeScript, Rust, Go, C#, Kotlin) must expose all t
 
 ### Documentation
 
-Every public function, type, and constant must have a docstring/JSDoc/KDoc/doc comment. Documentation explains what the function does and why a merchant would call it — not implementation detail.
+Every public function, type, and constant must have a docstring/JSDoc/KDoc/doc comment. Documentation explains what the function does and why a merchant would call it, not implementation detail.
 
 ### Tests
 
@@ -22,7 +22,7 @@ Every SDK must ship a test suite covering:
 - PaymentInstance lifecycle (events, polling, terminal states, timeout, reference mismatch)
 - Retry behavior (retryable status codes, non-retryable status codes, backoff timing)
 - Webhook signature verification (valid, invalid, tampered, stale/replayed)
-- The canonical Security Test suite (S1–S21, see §Security Tests) — required, not optional
+- The canonical Security Test suite (S1–S21, see §Security Tests). Required, not optional
 
 ### Edge Case Testing
 
@@ -51,7 +51,7 @@ Every SDK must test the following edge cases:
 **Signing and security:**
 - Canonical payload with nested objects and arrays (deterministic ordering)
 - Canonical payload with unicode characters in values
-- Canonical payload with keys that order differently under locale vs code point (mixed-case, leading underscore, diacritic, CJK, non-BMP) — must sort by code point (JCS)
+- Canonical payload with keys that order differently under locale vs code point (mixed-case, leading underscore, diacritic, CJK, non-BMP), must sort by code point (JCS)
 - Response signature missing from server response
 - Response signature from a different secret
 - Response signature over partial payload (some fields stripped)
@@ -63,8 +63,8 @@ Every SDK must test the following edge cases:
 - Status transitions: `pending` → `failed` with failure reason
 - Status transitions: `pending` → `cancelled`
 - Reference mismatch on second poll (server returns different reference)
-- Polling timeout (max attempts exhausted) — only when merchant sets `maxPollAttempts`
-- Polling timeout (max duration exhausted) — only when merchant sets `maxPollDurationMs`
+- Polling timeout (max attempts exhausted), only when merchant sets `maxPollAttempts`
+- Polling timeout (max duration exhausted), only when merchant sets `maxPollDurationMs`
 - Delayed flag with `onDelayed: "return"` resolves with still-pending transaction
 - Delayed flag with `onDelayed: "wait"` (default) continues until terminal
 - `collectPaymentAndResolve` / `makePayoutAndResolve` continue client polling when server returns non-terminal
@@ -80,7 +80,7 @@ Every SDK must test the following edge cases:
 
 ### Security Tests
 
-Every SDK implementation **MUST** ship a dedicated security test suite covering the canonical cases below. These are the cross-language contract for the SDK's cryptographic surface; IDs (S1–S21) are traceable from this document to each SDK's test code. They run with mocked transport — no network required.
+Every SDK implementation **MUST** ship a dedicated security test suite covering the canonical cases below. These are the cross-language contract for the SDK's cryptographic surface; IDs (S1–S21) are traceable from this document to each SDK's test code. They run with mocked transport, no network required.
 
 | ID  | Requirement |
 |-----|-------------|
@@ -92,19 +92,19 @@ Every SDK implementation **MUST** ship a dedicated security test suite covering 
 | S6  | Response verification **rejects** a tampered payload, and rejects a signature produced with a different secret. |
 | S7  | Response verification rejects malformed, empty, short, or non-hex signatures **without throwing** (length-guarded constant-time compare), and rejects a one-byte-flipped signature. |
 | S8  | Webhook verification accepts a valid signature over the **raw body**, and rejects a tampered body, a wrong secret, and a malformed signature (without throwing). Additionally, it NEVER raises on any input: invalid UTF-8 payload bytes, unparseable JSON, empty body, or missing timestamp all return `false`. |
-| S9  | All signature comparisons use a constant-time, length-guarded comparison primitive — never an ordinary string/`==` comparison on the digest. |
+| S9  | All signature comparisons use a constant-time, length-guarded comparison primitive, never an ordinary string/`==` comparison on the digest. |
 | S10 | The transport **rejects a success response whose signature is missing** (fail-closed, per D15). It must not return the data. |
 | S11 | The transport **rejects a success response whose signature is invalid**, and accepts one whose signature is valid. |
 | S12 | Config construction rejects an `apiKey` without the `npk_` prefix and an `apiSecret` without the `nps_` prefix. |
-| S13 | The API secret never appears on the SDK's public/serialized surface, and the instance cache is secret-aware (rotating the secret yields a different instance — it is never reused under a stale secret). |
+| S13 | The API secret never appears on the SDK's public/serialized surface, and the instance cache is secret-aware (rotating the secret yields a different instance, it is never reused under a stale secret). |
 | S14 | Webhook verification is replay-protected: a correctly-signed but **stale** webhook (signed timestamp older than the tolerance window) is **rejected**, a fresh one is accepted, a valid signature carrying **no timestamp fails closed**, and swapping in a fresh timestamp while keeping the captured signature is rejected (the timestamp is signed, so it cannot be refreshed without the secret). |
 | S15 | Response replay is rejected: a response whose signature verifies but whose echoed `_requestNonce` does not match the nonce just sent is rejected as `internal`, and so is one that omits the field. A response captured from an earlier legitimate call MUST NOT satisfy a later request for the same reference. |
 | S16 | Signatures are accepted in one canonical form only: a correctly-computed signature re-spelled in uppercase hex is rejected. Verifying by comparing decoded bytes is case-blind and does not satisfy this. |
 | S17 | The response size cap is enforced during the read: an oversized body is rejected both when the server declares an oversized `Content-Length` AND when it sends no length at all (chunked), with the read aborted rather than completed-then-discarded. |
 | S18 | `0` tolerance is strict, not disabled: a stale webhook with `tolerance = 0` is rejected, and only the explicit disable sentinel accepts it. |
-| S19 | The SDK reproduces every [conformance vector](./transport.md#conformance-vectors) (V1–V7) exactly — both the canonical string and the hex signature — as a unit test. V7 is not optional: it is the only vector that distinguishes true UTF-16 code-unit ordering from locale collation, UTF-16LE byte ordering, and code-point ordering. |
+| S19 | The SDK reproduces every [conformance vector](./transport.md#conformance-vectors) (V1–V7) exactly, both the canonical string and the hex signature, as a unit test. V7 is not optional: it is the only vector that distinguishes true UTF-16 code-unit ordering from locale collation, UTF-16LE byte ordering, and code-point ordering. |
 | S20 | Client-side validation rejects a non-integer `amount`, `items[].quantity`, or `items[].unitPrice` with a `validation` error before any signing or network call (invariant 33). |
-| S21 | The signed `fingerprint` equals the `_fingerprint` in the request body (invariant 34), and the signature is computed over the inner payload only — a signature computed over the full `{intent, service, action, payload}` envelope is rejected by the backend. |
+| S21 | The signed `fingerprint` equals the `_fingerprint` in the request body (invariant 34), and the signature is computed over the inner payload only, a signature computed over the full `{intent, service, action, payload}` envelope is rejected by the backend. |
 
 ### Integration Tests
 
@@ -113,11 +113,11 @@ Every SDK must ship an integration test suite that runs against a real sandbox b
 **Environment:**
 
 - Tests require valid sandbox credentials (`apiKey` with `npk_test_` prefix, matching `apiSecret`).
-- Tests run in sandbox/test mode — no real money moves, sandbox provider returns `"pending"` immediately then transitions through `"processing"` to terminal during polling (2–8 s total).
+- Tests run in sandbox/test mode, no real money moves, sandbox provider returns `"pending"` immediately then transitions through `"processing"` to terminal during polling (2–8 s total).
 - A `NYLONPAY_TEST_MODE` environment variable (or language equivalent) gates tests that require live-only behavior (e.g., revoked key detection). These tests are skipped when the variable is not set to `live`.
 - Each test creates a fresh SDK instance with singleton bypass (`force: true` or equivalent) to prevent state leakage between test suites.
 
-**Required coverage — every SDK must implement these tests:**
+**Required coverage, every SDK must implement these tests:**
 
 | # | Test | Operation | What it proves |
 |---|------|-----------|---------------|
@@ -128,17 +128,17 @@ Every SDK must ship an integration test suite that runs against a real sandbox b
 | I5 | Get transaction after payout | `getTransaction` | Server-side record matches the reference returned by payout |
 | I6 | Idempotency on payout | `makePayout` × 2 | Same `reference` returns the same transaction, not a duplicate |
 | I7 | Verify phone | `verifyPhone` | Returns a verified result with customer name from the real provider |
-| I8 | Key validation — missing apiKey | `createNylonPay` | Throws/returns error before any network call |
-| I9 | Key validation — bad apiKey prefix | `createNylonPay` | Throws/returns error for keys without `npk_` prefix |
-| I10 | Key validation — missing apiSecret | `createNylonPay` | Throws/returns error before any network call |
-| I11 | Key validation — bad apiSecret prefix | `createNylonPay` | Throws/returns error for secrets without `nps_` prefix |
+| I8 | Key validation, missing apiKey | `createNylonPay` | Throws/returns error before any network call |
+| I9 | Key validation, bad apiKey prefix | `createNylonPay` | Throws/returns error for keys without `npk_` prefix |
+| I10 | Key validation, missing apiSecret | `createNylonPay` | Throws/returns error before any network call |
+| I11 | Key validation, bad apiSecret prefix | `createNylonPay` | Throws/returns error for secrets without `nps_` prefix |
 | I12 | Singleton behavior | `createNylonPay` × 2 | Second call without `force` returns the same instance |
 | I13 | Unknown reference | `getTransaction` | Returns error for a reference that doesn't exist |
 | I14 | Sub-minimum collection amount | `collectPayment` | Server rejects amounts below 500 UGX with a validation error |
 | I14b | Sub-minimum payout amount | `makePayout` | Server rejects amounts below 5000 UGX with a validation error |
-| I15 | Revoked key (live-only) | `collectPayment` | Server rejects a revoked API key — `collectPayment` throws an error with category `auth` (HTTP 400, not 401). Skipped unless `NYLONPAY_TEST_MODE=live` |
-| I16 | Unknown key → auth category | `getStatus` / `collectPayment` | A well-formed but unknown key yields category `auth` — `getStatus` returns an error result, `collectPayment` throws. Sandbox-testable (unlike I15) |
-| I17 | Resolve returns full Transaction | `collectPaymentAndResolve` | Returns `id`, numeric `amount`, `metadata`, and (on failure) `failureReason` — never a partial stub |
+| I15 | Revoked key (live-only) | `collectPayment` | Server rejects a revoked API key, `collectPayment` throws an error with category `auth` (HTTP 400, not 401). Skipped unless `NYLONPAY_TEST_MODE=live` |
+| I16 | Unknown key → auth category | `getStatus` / `collectPayment` | A well-formed but unknown key yields category `auth`, `getStatus` returns an error result, `collectPayment` throws. Sandbox-testable (unlike I15) |
+| I17 | Resolve returns full Transaction | `collectPaymentAndResolve` | Returns `id`, numeric `amount`, `metadata`, and (on failure) `failureReason`, never a partial stub |
 | I18 | Metadata round-trip | `collectPayment` + `getTransaction` | Merchant-supplied `metadata` is returned unchanged |
 | I19 | Polling reaches terminal | `collectPayment` + `wait()` | A polling instance resolves to a terminal state and never hangs |
 
@@ -146,7 +146,7 @@ Every SDK must ship an integration test suite that runs against a real sandbox b
 
 - Each test uses a unique `reference` (either auto-generated or explicitly unique per run) to prevent cross-test idempotency collisions.
 - Tests do not depend on execution order. Each test is independently runnable.
-- Tests do not assert on server-side timing (e.g., "response arrived within 2 seconds") — sandbox latency is non-deterministic.
+- Tests do not assert on server-side timing (e.g., "response arrived within 2 seconds"), sandbox latency is non-deterministic.
 - Tests do not assert on internal server state beyond what the SDK's public API returns.
 
 **Cross-language parity:**
@@ -156,5 +156,5 @@ Every SDK must ship an integration test suite that runs against a real sandbox b
 
 ### Spec Compliance
 
-No SDK adds operations, parameters, events, or behavior beyond what this spec defines. If a feature is needed across SDKs, this spec updates first — then all implementations follow. Language-specific conveniences (e.g., helper functions that compose existing operations) are permitted only if they do not introduce new server interactions or alter the documented contract.
+No SDK adds operations, parameters, events, or behavior beyond what this spec defines. If a feature is needed across SDKs, this spec updates first, then all implementations follow. Language-specific conveniences (e.g., helper functions that compose existing operations) are permitted only if they do not introduce new server interactions or alter the documented contract.
 

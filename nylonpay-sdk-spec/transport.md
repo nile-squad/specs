@@ -8,9 +8,9 @@ The Nylon Pay backend uses Nile.js action-based routing. All SDK requests target
 
 All requests are `POST` to `{baseUrl}`.
 
-The default `baseUrl` is `https://api.nylonpay.nilesquad.com/api/services` — a single URL that includes both the origin and the path. The SDK appends no further path segments; the body identifies the service and action. Every SDK MUST default to this URL and MUST allow the merchant to override it in configuration — some merchants run against a custom base URL for special integrations, but the default is what ships.
+The default `baseUrl` is `https://api.nylonpay.nilesquad.com/api/services`, a single URL that includes both the origin and the path. The SDK appends no further path segments; the body identifies the service and action. Every SDK MUST default to this URL and MUST allow the merchant to override it in configuration. Some merchants run against a custom base URL for special integrations, but the default is what ships.
 
-There are no RESTful routes, no query parameters, no HTTP method variety. Every operation — regardless of type — hits the same endpoint with a different JSON body.
+There are no RESTful routes, no query parameters, no HTTP method variety. Every operation, regardless of type, hits the same endpoint with a different JSON body.
 
 ### Request Format
 
@@ -25,10 +25,10 @@ Every request body has this shape:
 }
 ```
 
-- `intent` — always `"execute"` for SDK operations
-- `service` — always `"sdk"`: every SDK operation targets the `sdk` service, the merchant-facing API surface.
-- `action` — the specific operation within the `sdk` service (the `sdk-*` names in the table below)
-- `payload` — the operation's input data, plus `_fingerprint` injected by the SDK
+- `intent`: always `"execute"` for SDK operations
+- `service`: always `"sdk"`. Every SDK operation targets the `sdk` service, the merchant-facing API surface.
+- `action`: the specific operation within the `sdk` service (the `sdk-*` names in the table below)
+- `payload`: the operation's input data, plus `_fingerprint` injected by the SDK
 
 The SDK maps each public operation to a service/action pair:
 
@@ -46,7 +46,7 @@ The SDK maps each public operation to a service/action pair:
 ### Wire Serialization Rules
 
 Optional fields whose value is absent (None/null/undefined) MUST be omitted from
-the JSON body entirely — they MUST NOT be serialized as `null`. The canonical
+the JSON body entirely. They MUST NOT be serialized as `null`. The canonical
 payload for signing (JCS, see Request Signing) operates on the serialized body,
 so sending `null` where an absent field is expected changes the signed content
 and breaks signature verification.
@@ -215,13 +215,13 @@ Every server response has this shape:
 }
 ```
 
-- `status` — `true` for success, `false` for error
-- `message` — human-readable description of the outcome
-- `data` — the result payload on success, or empty object `{}` on error
+- `status`: `true` for success, `false` for error
+- `message`: human-readable description of the outcome
+- `data`: the result payload on success, or empty object `{}` on error
 
 The SDK normalizes this to a result type: on success, returns the `data` payload. On failure, returns an error derived from `message`.
 
-**HTTP is binary.** The backend returns HTTP `200` for success (`status: true`) and HTTP `400` for every failure (`status: false`) — regardless of cause. The SDK MUST NOT branch on HTTP status codes to classify errors. Provider/transport-level failures the backend never produced (network errors, request timeouts, gateway 5xx) are surfaced by the SDK's transport with the `network`/`timeout`/`internal` categories.
+**HTTP is binary.** The backend returns HTTP `200` for success (`status: true`) and HTTP `400` for every failure (`status: false`), regardless of cause. The SDK MUST NOT branch on HTTP status codes to classify errors. Provider/transport-level failures the backend never produced (network errors, request timeouts, gateway 5xx) are surfaced by the SDK's transport with the `network`/`timeout`/`internal` categories.
 
 **Error categories.** Every server failure carries a machine-readable category so merchants branch on a stable value instead of parsing prose. Because the framework discards the response `data` on failures and only the `message` survives, the category travels as a suffix on the message:
 
@@ -241,13 +241,13 @@ signatureInput   = fingerprint + "." + nonce + "." + timestamp + "." + canonical
 signature        = HMAC-SHA256(key = apiSecret, message = signatureInput)   // lowercase hex
 ```
 
-The HMAC key is the `apiSecret` string as raw UTF-8 bytes — it is not decoded,
+The HMAC key is the `apiSecret` string as raw UTF-8 bytes, it is not decoded,
 hashed, or stripped of its `nps_` prefix first.
 
 #### What exactly is signed
 
-`payload` is the **inner `payload` object of the request envelope** — the
-operation's input plus `_fingerprint` — and **NOT** the full envelope. The
+`payload` is the **inner `payload` object of the request envelope:** the
+operation's input plus `_fingerprint`, and **NOT** the full envelope. The
 `intent`, `service`, and `action` fields are outside the signature. Signing the
 whole envelope is the single most common first-implementation mistake; it
 produces a well-formed request that fails auth 100% of the time.
@@ -276,7 +276,7 @@ another fails verification with an `auth` error and no further diagnostic.
 #### Canonical payload (JCS)
 
 The `canonicalPayload` is the **JSON Canonicalization Scheme** (RFC 8785 / JCS)
-serialization of the payload — see [D17](./decision-records.md#d17-canonical-payload-uses-the-json-canonicalization-scheme-jcs):
+serialization of the payload. See [D17](./decision-records.md#d17-canonical-payload-uses-the-json-canonicalization-scheme-jcs):
 
 - Object keys are sorted by **UTF-16 code unit**, recursively, at every level.
 - Arrays keep their order (never sorted).
@@ -298,7 +298,7 @@ this wrong, all of which produce a signature the server cannot reproduce:
    the low byte first, which is not code-unit order: `"Ā"` (U+0100 → `00 01`)
    sorts before `"Z"` (U+005A → `5A 00`), while code-unit order puts `"Z"`
    first. If your language exposes UTF-16 only as bytes, encode **big-endian**
-   (`utf-16-be`) — big-endian byte order and code-unit order coincide.
+   (`utf-16-be`), big-endian byte order and code-unit order coincide.
 3. **Sorting by Unicode code *point* via UTF-8 bytes.** This agrees with
    code-unit order across the whole BMP but diverges above U+FFFF, where
    surrogates (U+D800–U+DFFF) sort below U+E000–U+FFFF. An emoji key sorts
@@ -321,24 +321,24 @@ canonical form by default:
 
 | Language | Required settings |
 |----------|-------------------|
-| JavaScript / TypeScript | `JSON.stringify` is already canonical — no options needed. |
+| JavaScript / TypeScript | `JSON.stringify` is already canonical, no options needed. |
 | Python | `json.dumps(value, separators=(",", ":"), ensure_ascii=False)`. The default separators insert spaces; the default `ensure_ascii=True` escapes non-ASCII to `\uXXXX`. |
 | PHP | `json_encode($value, JSON_UNESCAPED_UNICODE \| JSON_UNESCAPED_SLASHES)`. Without these, `/` becomes `\/` and non-ASCII becomes `\uXXXX`. Empty maps must be `stdClass`/`JSON_FORCE_OBJECT`, not `[]`. |
-| Go | Set `Encoder.SetEscapeHTML(false)`. `encoding/json` escapes `<`, `>`, and `&` by default, and re-sorts map keys by code point — build an ordered structure yourself rather than relying on map iteration. |
+| Go | Set `Encoder.SetEscapeHTML(false)`. `encoding/json` escapes `<`, `>`, and `&` by default, and re-sorts map keys by code point, build an ordered structure yourself rather than relying on map iteration. |
 | Java / C# | Disable HTML/non-ASCII escaping and any pretty-printing; serialize from an explicitly ordered map. |
 
 Vector V4 below catches every one of these escaping defaults.
 
 #### Request headers
 
-- `x-nylon-key` — API key (plaintext, starts with `npk_`)
-- `x-nylon-nonce` — 32-character hex nonce (unique per request, from cryptographic random bytes)
-- `x-nylon-timestamp` — millisecond timestamp as a decimal string
-- `x-nylon-signature` — computed HMAC signature, **lowercase hex** (the one canonical form; see invariant 28)
+- `x-nylon-key`: API key (plaintext, starts with `npk_`)
+- `x-nylon-nonce`: 32-character hex nonce (unique per request, from cryptographic random bytes)
+- `x-nylon-timestamp`: millisecond timestamp as a decimal string
+- `x-nylon-signature`: computed HMAC signature, **lowercase hex** (the one canonical form; see invariant 28)
 
 #### Request body additions
 
-- `_fingerprint` — SHA-256 hash of OS and runtime metadata, injected into every
+- `_fingerprint`: SHA-256 hash of OS and runtime metadata, injected into every
   authenticated request body. Its exact composition is an implementation choice
   (the server treats it as an opaque stable identifier); it MUST be a stable
   64-char lowercase hex value for the life of the process, and MUST match the
@@ -452,7 +452,7 @@ def create_signature(
 
 Every implementation MUST reproduce these exactly. They are generated from the
 reference implementation and verified against the backend's verifier. Run them
-as a unit test before sending a single live request — each one isolates a
+as a unit test before sending a single live request, each one isolates a
 failure mode that is otherwise diagnosed only as an opaque `auth` error.
 
 Fixed inputs for all vectors:
@@ -464,7 +464,7 @@ nonce       = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"
 timestamp   = "1718976000000"
 ```
 
-**V1 — a representative payload.**
+**V1: a representative payload.**
 
 ```json
 {"amount":5000,"currency":"UGX","customer":{"name":"John Doe","phoneNumber":"+256700000000"},"description":"Test payment","reference":"ORDER-2026-001","metadata":{"orderId":"12345","items":"3"}}
@@ -473,7 +473,7 @@ timestamp   = "1718976000000"
 - canonical: `{"amount":5000,"currency":"UGX","customer":{"name":"John Doe","phoneNumber":"+256700000000"},"description":"Test payment","metadata":{"items":"3","orderId":"12345"},"reference":"ORDER-2026-001"}`
 - signature: `dc6e1717d7c37d7a3b334087d9882c07663edb2dfc8f2f06cd77c0d2d8a58686`
 
-**V2 — key insertion order is irrelevant.** The same fields as V1, inserted in
+**V2: key insertion order is irrelevant.** The same fields as V1, inserted in
 reverse, MUST produce the identical canonical string and signature as V1.
 
 ```json
@@ -482,7 +482,7 @@ reverse, MUST produce the identical canonical string and signature as V1.
 
 - signature: `dc6e1717d7c37d7a3b334087d9882c07663edb2dfc8f2f06cd77c0d2d8a58686`
 
-**V3 — arrays keep their order; objects inside arrays are still sorted.**
+**V3: arrays keep their order; objects inside arrays are still sorted.**
 
 ```json
 {"items":[{"unitPrice":2000,"name":"Zeta","quantity":1},{"name":"Alpha","quantity":2,"unitPrice":500}],"tags":["b","a","c"],"amount":4500}
@@ -494,7 +494,7 @@ reverse, MUST produce the identical canonical string and signature as V1.
 Note that `tags` stays `["b","a","c"]` and the second item keeps its position,
 while each item object's own keys are sorted.
 
-**V4 — string escaping.** Catches `ensure_ascii`, escaped forward slashes, and
+**V4: string escaping.** Catches `ensure_ascii`, escaped forward slashes, and
 HTML escaping. Only `"`, `\`, and control characters are escaped; `/`, `<`,
 `>`, `&`, and non-ASCII characters are emitted literally.
 
@@ -505,7 +505,7 @@ HTML escaping. Only `"`, `\`, and control characters are escaped; `/`, `<`,
 - canonical: `{"backslash":"x\\y","newline":"line1\nline2\ttab","note":"café / 50% <b>&\"quoted\"</b>","path":"a/b/c"}`
 - signature: `80eb3c6e35b8b3dcc67a57e056634b6f68f2f84b9454bea3aa5e86647eb47649`
 
-**V5 — ASCII key ordering.** Digits before uppercase before `_` before
+**V5: ASCII key ordering.** Digits before uppercase before `_` before
 lowercase, i.e. plain code-unit order, not dictionary or case-insensitive order.
 
 ```json
@@ -515,7 +515,7 @@ lowercase, i.e. plain code-unit order, not dictionary or case-insensitive order.
 - canonical: `{"0":6,"A":4,"Z":1,"_x":2,"a":3,"z":5}`
 - signature: `7b9da2fccf0140a7b721715b7b61f17ad3407bd40659b54d983c8e8379108adc`
 
-**V6 — empty containers and zero.** An empty map serializes as `{}`, never as
+**V6: empty containers and zero.** An empty map serializes as `{}`, never as
 `[]` (a real trap in PHP, where `[]` is both an empty list and an empty map).
 
 ```json
@@ -525,7 +525,7 @@ lowercase, i.e. plain code-unit order, not dictionary or case-insensitive order.
 - canonical: `{"emptyArray":[],"emptyObject":{},"emptyString":"","zero":0}`
 - signature: `f1d8a628663cc9279c675b001e5142e10c6880c2713145f7ebb946c73af2e875`
 
-**V7 — non-ASCII key ordering.** The decisive vector: it fails under
+**V7: non-ASCII key ordering.** The decisive vector: it fails under
 locale-sensitive collation, under UTF-16LE byte sorting, and under UTF-8
 code-point sorting, and passes only under true UTF-16 code-unit order. Merchant
 `metadata` keys are arbitrary merchant-supplied strings, so this is reachable in
@@ -562,7 +562,7 @@ The server signs every response to prevent tampering, and binds it to the
 request that solicited it (D21):
 
 - Response body includes a `_responseSignature` field
-- Response body includes a `_requestNonce` field — the nonce from the request being answered, covered by the signature
+- Response body includes a `_requestNonce` field, the nonce from the request being answered, covered by the signature
 - SDK strips the `_responseSignature` field from the response
 - SDK recomputes `HMAC-SHA256(apiSecret, canonicalPayload)` over the remaining payload (which still includes `_requestNonce`)
 - SDK compares the computed signature against the received signature using constant-time comparison
@@ -579,7 +579,7 @@ same reference.
 
 The SDK MUST enforce a maximum response body size. Responses whose body exceeds
 the configured limit MUST be rejected as an `internal` error before signature
-verification begins — the data is never read into memory beyond the limit. The
+verification begins, the data is never read into memory beyond the limit. The
 default limit is 10 MB. The limit MAY be configurable.
 
 The cap MUST be enforced **while the body is read**, against a running byte
@@ -598,11 +598,11 @@ MITM resource-exhaustion attack against the SDK consumer.
 - Retry on HTTP status codes: 408, 429, 500, 502, 503, 504
 - Retry on network errors and request timeouts
 - Do NOT retry on 4xx errors except 408 and 429 (client errors like 400, 401, 403, 404, 422 are returned immediately)
-- Business failures are HTTP `400` and therefore never retried — they are returned (or thrown, for async initiation) immediately with their category
+- Business failures are HTTP `400` and therefore never retried, they are returned (or thrown, for async initiation) immediately with their category
 - Exponential backoff: `2^attempt * 1000 + random(0-500)` ms
 - Max retries: configurable (default 3)
 - Per-request timeout: configurable (default 30s), enforced via AbortController equivalent
-- On retry, the request **body is unchanged** (same payload, same `reference`), but each attempt is **signed fresh** — a new `nonce`, `timestamp`, and `signature` per try. Idempotency is carried by the constant `reference` (see [D18](./decision-records.md#d18-the-reference-is-the-only-transaction-identity-no-separate-idempotency-key-no-heuristic-duplicate-detection)), not by reusing the nonce. Re-signing keeps a post-backoff retry inside the server's timestamp-freshness window and prevents a retry from being rejected as a nonce replay (see [D19](./decision-records.md#d19-retries-are-signed-fresh-per-attempt-the-reference-not-the-nonce-carries-idempotency))
+- On retry, the request **body is unchanged** (same payload, same `reference`), but each attempt is **signed fresh:** a new `nonce`, `timestamp`, and `signature` per try. Idempotency is carried by the constant `reference` (see [D18](./decision-records.md#d18-the-reference-is-the-only-transaction-identity-no-separate-idempotency-key-no-heuristic-duplicate-detection)), not by reusing the nonce. Re-signing keeps a post-backoff retry inside the server's timestamp-freshness window and prevents a retry from being rejected as a nonce replay (see [D19](./decision-records.md#d19-retries-are-signed-fresh-per-attempt-the-reference-not-the-nonce-carries-idempotency))
 
 ### Status Polling
 

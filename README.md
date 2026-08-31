@@ -2,7 +2,7 @@
 
 Canonical, language-agnostic specifications for Nile Squad products. This is the
 source of truth a developer reads to implement an official SDK or integration in
-**any** language — the published packages are reference implementations of what
+**any** language, the published packages are reference implementations of what
 lives here.
 
 Each spec defines the API surface, types, behaviors, transport contract, and
@@ -18,13 +18,13 @@ implementations follow.
 
 ## Implementing an SDK from a spec
 
-1. Read the spec end to end — principles, decision records, operations, types,
+1. Read the spec end to end, principles, decision records, operations, types,
    transport contract, invariants, and prohibitions.
 2. Match names, shapes, events, and status values exactly. Only casing adapts to
    each language's conventions (`collectPayment` / `collect_payment` /
    `CollectPayment`).
 3. Use the reference implementation to resolve ambiguity, then mirror its public
-   surface — not its internal structure.
+   surface, not its internal structure.
 4. Ship the test suite the spec requires (signing, response verification,
    lifecycle, retries, webhook verification, and the listed edge cases).
 

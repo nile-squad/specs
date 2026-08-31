@@ -8,7 +8,7 @@
 
 ## Purpose
 
-The Nylon Pay SDK is the merchant's programmatic interface to the payment platform. It provides a consistent API across multiple languages for collecting payments, making payouts, verifying phones, creating invoices, checking transaction status, and verifying webhooks. The SDK abstracts the transport protocol, HMAC signing, polling mechanics, and error handling so merchants interact with payment operations — not infrastructure.
+The Nylon Pay SDK is the merchant's programmatic interface to the payment platform. It provides a consistent API across multiple languages for collecting payments, making payouts, verifying phones, creating invoices, checking transaction status, and verifying webhooks. The SDK abstracts the transport protocol, HMAC signing, polling mechanics, and error handling so merchants interact with payment operations, not infrastructure.
 
 All SDKs are server-side. Client-side packages (browser, mobile) are a future scope.
 
@@ -45,25 +45,25 @@ Pick the path that matches what you came for:
 
 Normative language: **MUST**/**MUST NOT** are hard requirements verified by the
 canonical test suites; everything else is contract description. Decision records
-are rationale, not requirements — an implementation is judged against Operations,
+are rationale, not requirements, an implementation is judged against Operations,
 Transport, Invariants, and Prohibitions.
 
 ## Implementations
 
 | Language | Status | Package / Repository |
 |----------|--------|----------------------|
-| TypeScript | **Available** — reference implementation | [`@nile-squad/nylonpay-ts`](https://github.com/nile-squad/nylonpay-ts) |
-| C# | In progress | — |
+| TypeScript | **Available:** reference implementation | [`@nile-squad/nylonpay-ts`](https://github.com/nile-squad/nylonpay-ts) |
+| C# | In progress | n/a |
 | Python | **Available** | [`nylonpay-py`](https://github.com/nile-squad/nylonpay-py) |
-| Go | Planned | — |
-| Rust | Planned | — |
+| Go | Planned | n/a |
+| Rust | Planned | n/a |
 | PHP | **Available** (alpha) | [`nile-squad/nylonpay-php`](https://github.com/nile-squad/nylonpay-php) |
-| Java | Planned | — |
-| Kotlin | Planned | — |
-| Elixir | Planned | — |
+| Java | Planned | n/a |
+| Kotlin | Planned | n/a |
+| Elixir | Planned | n/a |
 
 Want to implement one? Follow the reading path above, keep the API surface and
-behavior identical to this spec (only casing conventions change per language —
+behavior identical to this spec (only casing conventions change per language, 
 `collectPayment` vs `collect_payment`), and ship the canonical test suites from
 [Implementation Requirements](./implementation-requirements.md). If the spec and an
 implementation disagree, the spec wins: the spec updates first, implementations

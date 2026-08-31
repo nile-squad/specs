@@ -56,7 +56,7 @@ type Currency = "USD" | "EUR" | "GBP" | "KES" | "UGX" | "TZS" | "RWF";
 // Every hook is wrapped: `fn` is the handler, `onError` (required) receives any
 // throw/rejection from `fn`, and `enabled` (default true) toggles it off.
 // The SDK runs `fn` inside a safe boundary so merchant code can never crash the
-// payment flow — failures route to `onError` instead of bubbling.
+// payment flow. Failures route to `onError` instead of bubbling.
 type SdkHook<Fn> = {
   enabled?: boolean; // default true
   fn: Fn;
@@ -105,7 +105,7 @@ type NylonPayConfig = {
   maxPollDurationMs?: number;
   /** Optional cap. When omitted, wait() polls until terminal. */
   maxPollAttempts?: number;
-  /** When a polled payment reports delayed: true — "wait" (default) keeps polling; "return" resolves with the still-pending payment. */
+  /** When a polled payment reports delayed: true, "wait" (default) keeps polling; "return" resolves with the still-pending payment. */
   onDelayed?: "wait" | "return";
   /** Custom fetch implementation. Defaults to `globalThis.fetch`. Essential for edge runtimes and testing. */
   fetch?: typeof globalThis.fetch;
@@ -116,7 +116,7 @@ type NylonPayConfig = {
 
 type Customer = {
   name: string;
-  /** Phone number in any common format — normalized automatically to international format */
+  /** Phone number in any common format, normalized automatically to international format */
   phoneNumber: string;
   email?: string;
 };
@@ -127,11 +127,11 @@ Every `phoneNumber` field accepted by the SDK is normalized to international for
 (`256XXXXXXXXX`) before it reaches the backend. The normalization runs at three
 layers for defense-in-depth:
 
-1. **SDK (client-side)** — `normalizePhone()` runs synchronously before the request
+1. **SDK (client-side):** `normalizePhone()` runs synchronously before the request
    is signed and sent. The wire payload always carries the normalized number.
-2. **Backend Zod schema** — `phoneNumberSchema` validates then transforms the
+2. **Backend Zod schema:** `phoneNumberSchema` validates then transforms the
    number to normalized form. Catches callers that bypass the SDK.
-3. **Provider formatters** — `formatPhoneForPivot()` normalizes before handing the
+3. **Provider formatters:** `formatPhoneForPivot()` normalizes before handing the
    number to the provider. Defense-in-depth at the provider boundary.
 
 Normalization rules:
@@ -153,10 +153,10 @@ to payment providers.
 | Local (10-digit) | `0XXXXXXXXX` | `0768499027` |
 | International with `+` | `+256XXXXXXXXX` | `+256768499027` |
 | International without `+` | `256XXXXXXXXX` | `256768499027` |
-| With spaces (any format) | — | `+256 768 499 027`, `256 768 499 027` |
+| With spaces (any format) | n/a | `+256 768 499 027`, `256 768 499 027` |
 
 Merchants can pass phone numbers in any of these formats. The system handles
-normalization — the merchant does not need to format numbers before calling
+normalization. The merchant does not need to format numbers before calling
 the SDK.
 
 type Destination = {
@@ -277,14 +277,14 @@ type Transaction = {
   method: PaymentMethod;
   description: string;
   // Present (true) only when this response replayed an existing transaction
-  // for a reused reference — no new payment was initiated. See
+  // for a reused reference. No new payment was initiated. See
   // "Reference uniqueness and replay" in operations.md.
   duplicate?: boolean;
-  // The underlying operator's (telco's/bank's) own transaction id — what the
+  // The underlying operator's (telco's/bank's) own transaction id, what the
   // paying customer sees on their receipt. For cross-validating customer pay
   // claims. Null until the operator reports it (typically at terminal status).
   operatorTid?: string | null;
-  /** Normalized international format (256XXXXXXXXX) — see Phone Number Normalization below */
+  /** Normalized international format (256XXXXXXXXX), see Phone Number Normalization below */
   phone: string;
   email: string | null;
   failureReason: string | null;
@@ -348,7 +348,7 @@ type WebhookPayload = {
 Merchant-facing transaction record delivered inside a webhook payload. Field
 names match the wire JSON exactly (camelCase in both TypeScript and Python)
 because merchants type their `JSON.parse()` / `json.loads()` output against
-this directly — it is NOT passed through the SDK's snake_case ↔ camelCase
+this directly, it is NOT passed through the SDK's snake_case ↔ camelCase
 wire conversion.
 
 ```typescript
@@ -372,7 +372,7 @@ type WebhookTransactionSnapshot = {
 };
 ```
 
-Every key is always present — the backend sends an explicit null rather than
+Every key is always present, the backend sends an explicit null rather than
 omitting one, so the shape a merchant types against never changes. There is no
 `statusText` here: it belongs to the `Transaction` shape, and the statuses it
 describes (`on_hold`, `under_review`) emit no webhook at all.
@@ -383,7 +383,7 @@ The transaction record returned by `getTransaction`, `wait()`, and event handler
 
 ## Webhook Event Catalog
 
-Events are delivered as POST requests to the merchant's configured webhook URL. The body carries a `payload` field (not `data`) holding the merchant-facing transaction record. The signature does NOT live in the body — it travels in the `x-nylon-signature` HTTP header.
+Events are delivered as POST requests to the merchant's configured webhook URL. The body carries a `payload` field (not `data`) holding the merchant-facing transaction record. The signature does NOT live in the body, it travels in the `x-nylon-signature` HTTP header.
 
 | Event Type | Trigger |
 |------------|---------|
@@ -394,7 +394,7 @@ Events are delivered as POST requests to the merchant's configured webhook URL. 
 
 **Webhook payload shape:** See `WebhookPayload` and `WebhookTransactionSnapshot` types above.
 
-No other status emits a webhook. A payout parked for review (`on_hold`, `under_review`) stays silent until it resolves to one of the four above. Both collections and payouts use this same catalog — `payload.type` distinguishes them.
+No other status emits a webhook. A payout parked for review (`on_hold`, `under_review`) stays silent until it resolves to one of the four above. Both collections and payouts use this same catalog, `payload.type` distinguishes them.
 
 **Signature form:** lowercase hex, the one canonical form (see invariant 28). Verification rejects any other spelling.
 
@@ -411,7 +411,7 @@ No other status emits a webhook. A payout parked for review (`on_hold`, `under_r
 Only the body is covered by the signature. The `x-nylon-event`,
 `x-nylon-delivery-id`, and `x-nylon-timestamp` headers are conveniences for
 routing and logging, and a replay attacker can set them to anything. Never use
-the header timestamp for the freshness check — read `timestamp` from the body
+the header timestamp for the freshness check, read `timestamp` from the body
 after the HMAC verifies (invariants 8 and 23, [D16](./decision-records.md#d16-webhook-verification-is-replay-protected)).
 
 The webhook secret is a **separate credential from `apiSecret`**. Requests and
@@ -461,5 +461,5 @@ parsed body need their raw-body option enabled.
 **Delivery guarantees:**
 - At-least-once delivery. Five attempts with exponential backoff over roughly fifteen minutes, then one attempt nightly for up to five further nights before the delivery is retired.
 - Merchants must respond with 2xx within 10 seconds
-- Duplicate delivery is possible — merchants must be idempotent (use `delivery_id` or `reference` for deduplication)
+- Duplicate delivery is possible, merchants must be idempotent (use `delivery_id` or `reference` for deduplication)
 
