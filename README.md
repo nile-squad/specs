@@ -15,12 +15,11 @@ implementations follow.
 | Product | Spec | What it is | Reference implementation |
 |---------|------|------------|--------------------------|
 | **Nylon Pay** | [`nylonpay-sdk-spec/`](./nylonpay-sdk-spec/spec.md) | Server-side SDK for collecting payments, payouts, phone verification, invoices, transaction status, and webhook verification over a signed, action-based transport. | [nylonpay-ts](https://github.com/nile-squad/nylonpay-ts) (TypeScript) |
-| **AI** | _coming soon_ | Specification for Nile Squad AI integrations. | — |
 
 ## Implementing an SDK from a spec
 
-1. Read the relevant spec end to end — principles, decision records, operations,
-   types, transport contract, invariants, and prohibitions.
+1. Read the spec end to end — principles, decision records, operations, types,
+   transport contract, invariants, and prohibitions.
 2. Match names, shapes, events, and status values exactly. Only casing adapts to
    each language's conventions (`collectPayment` / `collect_payment` /
    `CollectPayment`).
