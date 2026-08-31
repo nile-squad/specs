@@ -398,6 +398,66 @@ No other status emits a webhook. A payout parked for review (`on_hold`, `under_r
 
 **Signature form:** lowercase hex, the one canonical form (see invariant 28). Verification rejects any other spelling.
 
+### Delivery Headers
+
+| Header | Value |
+|--------|-------|
+| `content-type` | `application/json` |
+| `x-nylon-signature` | HMAC-SHA256 over the **raw body bytes**, keyed with the merchant's **webhook secret**, lowercase hex |
+| `x-nylon-event` | The event type, mirroring `event` in the body |
+| `x-nylon-delivery-id` | The delivery id, mirroring `delivery_id` in the body |
+| `x-nylon-timestamp` | The delivery timestamp, mirroring `timestamp` in the body |
+
+Only the body is covered by the signature. The `x-nylon-event`,
+`x-nylon-delivery-id`, and `x-nylon-timestamp` headers are conveniences for
+routing and logging, and a replay attacker can set them to anything. Never use
+the header timestamp for the freshness check — read `timestamp` from the body
+after the HMAC verifies (invariants 8 and 23, [D16](./decision-records.md#d16-webhook-verification-is-replay-protected)).
+
+The webhook secret is a **separate credential from `apiSecret`**. Requests and
+responses are signed with `apiSecret`; webhooks are signed with the webhook
+secret configured on the API key.
+
+### Worked Delivery
+
+`timestamp` is **ISO 8601 in UTC with milliseconds and a trailing `Z`**, freshly
+stamped on the first attempt and on every retry. Verifiers also accept epoch
+seconds or milliseconds so a merchant's own tooling can re-stamp in tests, but
+Nylon Pay emits only this form.
+
+```
+POST https://merchant.example.com/webhooks/nylonpay
+content-type: application/json
+x-nylon-signature: 3407e68b8e3f65fc8a4811f637a60ae16bc2629056f7cdf4057e21bbc2b24b5b
+x-nylon-event: transaction.successful
+x-nylon-delivery-id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+x-nylon-timestamp: 2026-06-11T09:30:00.000Z
+
+{
+  "delivery_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "event": "transaction.successful",
+  "payload": {
+    "transactionId": "3f9c1a7e-5b2d-48c6-a0e8-f4b1d7c92e50",
+    "reference": "ORDER-2026-001",
+    "amount": "5000",
+    "currency": "UGX",
+    "status": "successful",
+    "previousStatus": "pending",
+    "type": "collection",
+    "method": "mobileMoney",
+    "mode": "live",
+    "failureReason": null,
+    "operatorTid": "MP240611.0930.A12345"
+  },
+  "timestamp": "2026-06-11T09:30:00.000Z"
+}
+```
+
+Verify the **exact bytes received**, before any JSON parse or re-serialization
+(invariants 8 and 29): re-serializing changes key order and whitespace, so a
+genuine delivery would fail its own signature. Frameworks that expose only a
+parsed body need their raw-body option enabled.
+
 **Delivery guarantees:**
 - At-least-once delivery. Five attempts with exponential backoff over roughly fifteen minutes, then one attempt nightly for up to five further nights before the delivery is retired.
 - Merchants must respond with 2xx within 10 seconds
