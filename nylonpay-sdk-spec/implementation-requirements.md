@@ -22,7 +22,7 @@ Every SDK must ship a test suite covering:
 - PaymentInstance lifecycle (events, polling, terminal states, timeout, reference mismatch)
 - Retry behavior (retryable status codes, non-retryable status codes, backoff timing)
 - Webhook signature verification (valid, invalid, tampered, stale/replayed)
-- The canonical Security Test suite (S1–S18, see §Security Tests) — required, not optional
+- The canonical Security Test suite (S1–S21, see §Security Tests) — required, not optional
 
 ### Edge Case Testing
 
@@ -80,7 +80,7 @@ Every SDK must test the following edge cases:
 
 ### Security Tests
 
-Every SDK implementation **MUST** ship a dedicated security test suite covering the canonical cases below. These are the cross-language contract for the SDK's cryptographic surface; IDs (S1–S18) are traceable from this document to each SDK's test code. They run with mocked transport — no network required.
+Every SDK implementation **MUST** ship a dedicated security test suite covering the canonical cases below. These are the cross-language contract for the SDK's cryptographic surface; IDs (S1–S21) are traceable from this document to each SDK's test code. They run with mocked transport — no network required.
 
 | ID  | Requirement |
 |-----|-------------|
@@ -102,6 +102,9 @@ Every SDK implementation **MUST** ship a dedicated security test suite covering 
 | S16 | Signatures are accepted in one canonical form only: a correctly-computed signature re-spelled in uppercase hex is rejected. Verifying by comparing decoded bytes is case-blind and does not satisfy this. |
 | S17 | The response size cap is enforced during the read: an oversized body is rejected both when the server declares an oversized `Content-Length` AND when it sends no length at all (chunked), with the read aborted rather than completed-then-discarded. |
 | S18 | `0` tolerance is strict, not disabled: a stale webhook with `tolerance = 0` is rejected, and only the explicit disable sentinel accepts it. |
+| S19 | The SDK reproduces every [conformance vector](./transport.md#conformance-vectors) (V1–V7) exactly — both the canonical string and the hex signature — as a unit test. V7 is not optional: it is the only vector that distinguishes true UTF-16 code-unit ordering from locale collation, UTF-16LE byte ordering, and code-point ordering. |
+| S20 | Client-side validation rejects a non-integer `amount`, `items[].quantity`, or `items[].unitPrice` with a `validation` error before any signing or network call (invariant 33). |
+| S21 | The signed `fingerprint` equals the `_fingerprint` in the request body (invariant 34), and the signature is computed over the inner payload only — a signature computed over the full `{intent, service, action, payload}` envelope is rejected by the backend. |
 
 ### Integration Tests
 

@@ -236,34 +236,325 @@ The SDK splits the suffix off, exposing `category` and the clean `message` on th
 Every request is signed with HMAC-SHA256. The signing protocol:
 
 ```
-canonicalPayload = JSON.stringify(payload, sortedKeys)
-signatureInput = fingerprint + "." + nonce + "." + timestamp + "." + canonicalPayload
-signature = HMAC-SHA256(apiSecret, signatureInput)
+canonicalPayload = JCS(payload)
+signatureInput   = fingerprint + "." + nonce + "." + timestamp + "." + canonicalPayload
+signature        = HMAC-SHA256(key = apiSecret, message = signatureInput)   // lowercase hex
 ```
+
+The HMAC key is the `apiSecret` string as raw UTF-8 bytes — it is not decoded,
+hashed, or stripped of its `nps_` prefix first.
+
+#### What exactly is signed
+
+`payload` is the **inner `payload` object of the request envelope** — the
+operation's input plus `_fingerprint` — and **NOT** the full envelope. The
+`intent`, `service`, and `action` fields are outside the signature. Signing the
+whole envelope is the single most common first-implementation mistake; it
+produces a well-formed request that fails auth 100% of the time.
+
+For the [Example Exchange](#example-exchange) above, the signed object is:
+
+```json
+{
+  "amount": 5000,
+  "currency": "UGX",
+  "customer": { "name": "Jane Doe", "phoneNumber": "+256700000000" },
+  "description": "Order payment",
+  "method": "mobileMoney",
+  "reference": "ORDER-2026-001",
+  "metadata": { "orderId": "12345" },
+  "_fingerprint": "<transport-generated fingerprint>"
+}
+```
+
+The `fingerprint` component of `signatureInput` MUST be **byte-identical to the
+`_fingerprint` value inside that payload**. The server does not receive the
+fingerprint in a header: it reads `_fingerprint` out of the request body and
+feeds that value into its own `signatureInput`. Signing one value and sending
+another fails verification with an `auth` error and no further diagnostic.
+
+#### Canonical payload (JCS)
 
 The `canonicalPayload` is the **JSON Canonicalization Scheme** (RFC 8785 / JCS)
 serialization of the payload — see [D17](./decision-records.md#d17-canonical-payload-uses-the-json-canonicalization-scheme-jcs):
-- Object keys are sorted by **Unicode code point** (UTF-16 code-unit order),
-  recursively, at every level. The sort MUST NOT be locale-sensitive — a
-  collation that depends on the runtime's locale or Unicode data (e.g. a
-  `localeCompare`-style comparison) can order the same keys differently on
-  different runtimes and break verification on valid traffic.
+
+- Object keys are sorted by **UTF-16 code unit**, recursively, at every level.
 - Arrays keep their order (never sorted).
 - Numbers use the shortest round-tripping form (ECMAScript number-to-string),
-  strings use minimal JSON escaping, and there is no insignificant whitespace.
+  strings use minimal JSON escaping, and there is no insignificant whitespace
+  (no spaces after `:` or `,`).
 
 This makes the canonical string identical across languages and locales, so two
 identical payloads produce identical signatures regardless of field insertion
 order or where they were serialized.
 
-**Request headers:**
+**Sorting MUST be by UTF-16 code unit, and nothing else.** Three ways to get
+this wrong, all of which produce a signature the server cannot reproduce:
+
+1. **Locale-sensitive collation** (`localeCompare`, `strcoll`, ICU collators).
+   The order depends on the runtime's locale data, so the same payload
+   canonicalizes differently on two machines.
+2. **Sorting UTF-16 *little-endian* bytes.** Comparing UTF-16LE bytes compares
+   the low byte first, which is not code-unit order: `"Ā"` (U+0100 → `00 01`)
+   sorts before `"Z"` (U+005A → `5A 00`), while code-unit order puts `"Z"`
+   first. If your language exposes UTF-16 only as bytes, encode **big-endian**
+   (`utf-16-be`) — big-endian byte order and code-unit order coincide.
+3. **Sorting by Unicode code *point* via UTF-8 bytes.** This agrees with
+   code-unit order across the whole BMP but diverges above U+FFFF, where
+   surrogates (U+D800–U+DFFF) sort below U+E000–U+FFFF. An emoji key sorts
+   before `"�"` under JCS, and after it under code-point order.
+
+Vector V7 below exists specifically to catch all three.
+
+**Every numeric value on the wire MUST be an integer.** The JCS number rule is
+defined in terms of ECMAScript's number-to-string, which no other language
+reproduces for non-integers: the same value serializes as `5000` in JavaScript,
+`5000.0` in Python, and `1.0e+21` vs `1e+21` in PHP for large magnitudes. All
+amounts, quantities, and unit prices in this spec are whole units of the minor
+currency, so SDKs sidestep the problem entirely by **rejecting non-integer
+numbers during client-side validation** (see invariant 33) rather than trying to
+match ECMAScript float formatting. An SDK that accepts `amount=5000.0` will sign
+a canonical string the server cannot reproduce.
+
+**Per-language JSON encoder settings.** Most standard encoders do not emit the
+canonical form by default:
+
+| Language | Required settings |
+|----------|-------------------|
+| JavaScript / TypeScript | `JSON.stringify` is already canonical — no options needed. |
+| Python | `json.dumps(value, separators=(",", ":"), ensure_ascii=False)`. The default separators insert spaces; the default `ensure_ascii=True` escapes non-ASCII to `\uXXXX`. |
+| PHP | `json_encode($value, JSON_UNESCAPED_UNICODE \| JSON_UNESCAPED_SLASHES)`. Without these, `/` becomes `\/` and non-ASCII becomes `\uXXXX`. Empty maps must be `stdClass`/`JSON_FORCE_OBJECT`, not `[]`. |
+| Go | Set `Encoder.SetEscapeHTML(false)`. `encoding/json` escapes `<`, `>`, and `&` by default, and re-sorts map keys by code point — build an ordered structure yourself rather than relying on map iteration. |
+| Java / C# | Disable HTML/non-ASCII escaping and any pretty-printing; serialize from an explicitly ordered map. |
+
+Vector V4 below catches every one of these escaping defaults.
+
+#### Request headers
+
 - `x-nylon-key` — API key (plaintext, starts with `npk_`)
 - `x-nylon-nonce` — 32-character hex nonce (unique per request, from cryptographic random bytes)
-- `x-nylon-timestamp` — millisecond timestamp as string
+- `x-nylon-timestamp` — millisecond timestamp as a decimal string
 - `x-nylon-signature` — computed HMAC signature, **lowercase hex** (the one canonical form; see invariant 28)
 
-**Request body additions:**
-- `_fingerprint` — SHA-256 hash of OS and runtime metadata, injected into every authenticated request body
+#### Request body additions
+
+- `_fingerprint` — SHA-256 hash of OS and runtime metadata, injected into every
+  authenticated request body. Its exact composition is an implementation choice
+  (the server treats it as an opaque stable identifier); it MUST be a stable
+  64-char lowercase hex value for the life of the process, and MUST match the
+  `fingerprint` used in `signatureInput`.
+
+#### Reference implementation
+
+TypeScript (the reference implementation's actual signing path):
+
+```typescript
+import { createHmac } from "node:crypto";
+
+/** Compare two keys by UTF-16 code unit (RFC 8785), never by locale. */
+function compareByCodeUnit(first: string, second: string): number {
+  if (first < second) return -1;
+  if (first > second) return 1;
+  return 0;
+}
+
+function sortValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortValue);
+  if (value && typeof value === "object") {
+    const sorted = Object.entries(value as Record<string, unknown>)
+      .sort(([a], [b]) => compareByCodeUnit(a, b));
+    return Object.fromEntries(sorted.map(([k, v]) => [k, sortValue(v)]));
+  }
+  return value;
+}
+
+export function createCanonicalPayload(payload: unknown): string {
+  return JSON.stringify(sortValue(payload));
+}
+
+export function createSignaturePayload(input: {
+  fingerprint: string;
+  nonce: string;
+  timestamp: string;
+  payload: unknown;
+}): string {
+  return `${input.fingerprint}.${input.nonce}.${input.timestamp}.${createCanonicalPayload(input.payload)}`;
+}
+
+export function createSignature(input: {
+  fingerprint: string;
+  nonce: string;
+  timestamp: string;
+  payload: unknown;
+  secret: string;
+}): string {
+  return createHmac("sha256", input.secret)
+    .update(createSignaturePayload(input))
+    .digest("hex");
+}
+```
+
+Python, as a worked port for languages without JavaScript's string comparison:
+
+```python
+import hashlib
+import hmac
+import json
+from typing import Any
+
+
+def _sort_key(key: str) -> bytes:
+    """Sort key for JCS ordering: UTF-16 code units.
+
+    UTF-16 **big-endian** is used deliberately. Comparing UTF-16BE bytes is
+    equivalent to comparing UTF-16 code units numerically; comparing UTF-16LE
+    bytes is not, because it compares the low byte first (see vector V7).
+    """
+    return key.encode("utf-16-be")
+
+
+def _sort_value(value: Any) -> Any:
+    if isinstance(value, list):
+        return [_sort_value(item) for item in value]
+    if isinstance(value, dict):
+        return {
+            k: _sort_value(v)
+            for k, v in sorted(value.items(), key=lambda kv: _sort_key(kv[0]))
+        }
+    return value
+
+
+def create_canonical_payload(payload: Any) -> str:
+    # separators drop insignificant whitespace; ensure_ascii=False keeps
+    # non-ASCII characters literal, matching JSON.stringify.
+    return json.dumps(
+        _sort_value(payload), separators=(",", ":"), ensure_ascii=False
+    )
+
+
+def create_signature_payload(
+    fingerprint: str, nonce: str, timestamp: str, payload: Any
+) -> str:
+    canonical = create_canonical_payload(payload)
+    return f"{fingerprint}.{nonce}.{timestamp}.{canonical}"
+
+
+def create_signature(
+    fingerprint: str, nonce: str, timestamp: str, payload: Any, secret: str
+) -> str:
+    message = create_signature_payload(fingerprint, nonce, timestamp, payload)
+    return hmac.new(
+        secret.encode("utf-8"), message.encode("utf-8"), hashlib.sha256
+    ).hexdigest()
+```
+
+#### Conformance vectors
+
+Every implementation MUST reproduce these exactly. They are generated from the
+reference implementation and verified against the backend's verifier. Run them
+as a unit test before sending a single live request — each one isolates a
+failure mode that is otherwise diagnosed only as an opaque `auth` error.
+
+Fixed inputs for all vectors:
+
+```
+apiSecret   = "nps_test_conformance_secret"
+fingerprint = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"   (64 × "a")
+nonce       = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"
+timestamp   = "1718976000000"
+```
+
+**V1 — a representative payload.**
+
+```json
+{"amount":5000,"currency":"UGX","customer":{"name":"John Doe","phoneNumber":"+256700000000"},"description":"Test payment","reference":"ORDER-2026-001","metadata":{"orderId":"12345","items":"3"}}
+```
+
+- canonical: `{"amount":5000,"currency":"UGX","customer":{"name":"John Doe","phoneNumber":"+256700000000"},"description":"Test payment","metadata":{"items":"3","orderId":"12345"},"reference":"ORDER-2026-001"}`
+- signature: `dc6e1717d7c37d7a3b334087d9882c07663edb2dfc8f2f06cd77c0d2d8a58686`
+
+**V2 — key insertion order is irrelevant.** The same fields as V1, inserted in
+reverse, MUST produce the identical canonical string and signature as V1.
+
+```json
+{"metadata":{"items":"3","orderId":"12345"},"reference":"ORDER-2026-001","description":"Test payment","customer":{"phoneNumber":"+256700000000","name":"John Doe"},"currency":"UGX","amount":5000}
+```
+
+- signature: `dc6e1717d7c37d7a3b334087d9882c07663edb2dfc8f2f06cd77c0d2d8a58686`
+
+**V3 — arrays keep their order; objects inside arrays are still sorted.**
+
+```json
+{"items":[{"unitPrice":2000,"name":"Zeta","quantity":1},{"name":"Alpha","quantity":2,"unitPrice":500}],"tags":["b","a","c"],"amount":4500}
+```
+
+- canonical: `{"amount":4500,"items":[{"name":"Zeta","quantity":1,"unitPrice":2000},{"name":"Alpha","quantity":2,"unitPrice":500}],"tags":["b","a","c"]}`
+- signature: `98478585cf5ce0193a9aa6a6e86ff7f5dfc025945d03547dd548b9356b797e4b`
+
+Note that `tags` stays `["b","a","c"]` and the second item keeps its position,
+while each item object's own keys are sorted.
+
+**V4 — string escaping.** Catches `ensure_ascii`, escaped forward slashes, and
+HTML escaping. Only `"`, `\`, and control characters are escaped; `/`, `<`,
+`>`, `&`, and non-ASCII characters are emitted literally.
+
+```json
+{"note":"café / 50% <b>&\"quoted\"</b>","path":"a/b/c","backslash":"x\\y","newline":"line1\nline2\ttab"}
+```
+
+- canonical: `{"backslash":"x\\y","newline":"line1\nline2\ttab","note":"café / 50% <b>&\"quoted\"</b>","path":"a/b/c"}`
+- signature: `80eb3c6e35b8b3dcc67a57e056634b6f68f2f84b9454bea3aa5e86647eb47649`
+
+**V5 — ASCII key ordering.** Digits before uppercase before `_` before
+lowercase, i.e. plain code-unit order, not dictionary or case-insensitive order.
+
+```json
+{"Z":1,"_x":2,"a":3,"A":4,"z":5,"0":6}
+```
+
+- canonical: `{"0":6,"A":4,"Z":1,"_x":2,"a":3,"z":5}`
+- signature: `7b9da2fccf0140a7b721715b7b61f17ad3407bd40659b54d983c8e8379108adc`
+
+**V6 — empty containers and zero.** An empty map serializes as `{}`, never as
+`[]` (a real trap in PHP, where `[]` is both an empty list and an empty map).
+
+```json
+{"emptyObject":{},"emptyArray":[],"emptyString":"","zero":0}
+```
+
+- canonical: `{"emptyArray":[],"emptyObject":{},"emptyString":"","zero":0}`
+- signature: `f1d8a628663cc9279c675b001e5142e10c6880c2713145f7ebb946c73af2e875`
+
+**V7 — non-ASCII key ordering.** The decisive vector: it fails under
+locale-sensitive collation, under UTF-16LE byte sorting, and under UTF-8
+code-point sorting, and passes only under true UTF-16 code-unit order. Merchant
+`metadata` keys are arbitrary merchant-supplied strings, so this is reachable in
+production traffic, not a theoretical case.
+
+```json
+{"ÿ":1,"Ā":2,"a":3,"注文":4}
+```
+
+- canonical: `{"a":3,"ÿ":1,"Ā":2,"注文":4}`
+- signature: `f43182515649622666b920ac1274d6be5ee395d7c295a4eab6e914a48b212a3a`
+
+The expected order is `a` (U+0061) → `ÿ` (U+00FF) → `Ā` (U+0100) → `注` (U+6CE8).
+A UTF-16LE byte sort yields `Ā, a, 注文, ÿ` and a different signature.
+
+#### What the server checks
+
+The signature is verified alongside three bounds an implementation must design
+around. All are enforced server-side; none are negotiable from the client.
+
+| Check | Value | Consequence |
+|-------|-------|-------------|
+| Timestamp freshness | `x-nylon-timestamp` within **±5 minutes** of server time | Outside the window → `auth` error. This is why retries are re-signed per attempt (D19): a frozen timestamp ages out mid-backoff. |
+| Nonce replay | A given `(apiKey, nonce)` pair is accepted **once**, remembered for **10 minutes** | A repeated nonce is **rejected**, not replayed from cache. Never reuse a nonce, including on retry. |
+| Rate limits | 120 requests/minute per API key. Further limits apply above that, and sustained authentication failures from one source are throttled. | Exceeding any limit → `rate_limit` error. Retry backoff must not amplify past the per-key budget, and a client MUST honour a `rate_limit` error by backing off rather than retrying immediately. |
+
+A client whose clock drifts more than 5 minutes from real time cannot sign a
+valid request at all. Sign with the system clock in UTC milliseconds; do not
+derive the timestamp from a cached or monotonic-only source.
 
 ### Response Verification
 
@@ -311,7 +602,7 @@ MITM resource-exhaustion attack against the SDK consumer.
 - Exponential backoff: `2^attempt * 1000 + random(0-500)` ms
 - Max retries: configurable (default 3)
 - Per-request timeout: configurable (default 30s), enforced via AbortController equivalent
-- On retry, the request **body is unchanged** (same payload, same `reference`), but each attempt is **signed fresh** — a new `nonce`, `timestamp`, and `signature` per try. Idempotency is carried by the constant `reference` (see [D18](./decision-records.md#d18-the-reference-is-the-only-transaction-identity-no-separate-idempotency-key-no-heuristic-duplicate-detection)), not by reusing the nonce. Re-signing keeps a post-backoff retry inside the server's timestamp-freshness window and prevents a retry from being rejected as a nonce replay (see [D19](./decision-records.md#d19-retries-are-signed-fresh-per-attempt-reference-not-nonce-carries-idempotency))
+- On retry, the request **body is unchanged** (same payload, same `reference`), but each attempt is **signed fresh** — a new `nonce`, `timestamp`, and `signature` per try. Idempotency is carried by the constant `reference` (see [D18](./decision-records.md#d18-the-reference-is-the-only-transaction-identity-no-separate-idempotency-key-no-heuristic-duplicate-detection)), not by reusing the nonce. Re-signing keeps a post-backoff retry inside the server's timestamp-freshness window and prevents a retry from being rejected as a nonce replay (see [D19](./decision-records.md#d19-retries-are-signed-fresh-per-attempt-the-reference-not-the-nonce-carries-idempotency))
 
 ### Status Polling
 

@@ -203,9 +203,15 @@ is not a replay.
 Input shape:
 - `payload` — raw request body (string or bytes, depending on language)
 - `signature` — value of the `x-nylon-signature` HTTP request header
-- `secret` — merchant's webhook secret
-- `toleranceSeconds` — optional replay-protection window (default `300`). MUST be >= 0. Set to
-  `0` to disable the freshness check. Negative values are rejected (verification returns `false`).
+- `secret` — the merchant's **webhook secret**, which is NOT the `apiSecret` used for
+  request and response signing. They are separate credentials; using `apiSecret` here
+  makes every webhook fail verification.
+- `toleranceSeconds` — optional replay-protection window in seconds (default `300`).
+  `0` means a tolerance of **zero seconds — maximum strictness**, and does NOT disable
+  the check. Opting out requires the explicit `DISABLE_FRESHNESS_CHECK` sentinel
+  (value `-1`); any other negative value is rejected (verification returns `false`).
+  See [D20](./decision-records.md#d20-0-tolerance-means-strict-not-disabled) and
+  invariant 23.
 
 `verifyWebhookSignature` returns `false` for any verification failure — it NEVER
 raises or throws, regardless of input (malformed signature, non-hex signature,

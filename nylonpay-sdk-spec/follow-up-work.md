@@ -53,3 +53,28 @@ and non-BMP keys plus number and unicode string values. The change was a clean
 break (no dual-verify): only divergent-key payloads differ between the old and
 new canonical forms, and ordinary ASCII/camelCase traffic is byte-identical under
 both.
+
+### F8: Signing was specified but never proven across languages — RESOLVED (spec side)
+
+Resolved in spec v2.1.0. See the [Request Signing](./transport.md#request-signing)
+reference implementations, the [conformance vectors](./transport.md#conformance-vectors)
+(V1–V7), invariants 33–34, and requirements S19–S21.
+
+Signing was described normatively but with no executable artifact, so each
+implementation re-derived it from prose and the divergences were invisible until
+a live request failed with an opaque `auth` error. F7's claim of a
+"cross-language parity test" was overstated: the parity test compares the
+TypeScript SDK against the backend, both of which share JavaScript's string
+comparison, so it could not detect a non-JavaScript implementation that ordered
+keys differently.
+
+Three failure modes were reachable while nominally satisfying the old text:
+UTF-16**LE** byte sorting (not code-unit order), code-point sorting (diverges
+above U+FFFF), and default JSON encoder escaping (`ensure_ascii`, escaped
+slashes, HTML escaping). The vectors now pin all three, and V7 in particular
+fails under every incorrect ordering. The vectors are generated from the
+reference implementation and verified against the backend verifier.
+
+Closed on both sides: the vectors are published here, and the TypeScript,
+Python, and PHP SDKs each ship them as a unit test (S19). A new implementation
+should run them before sending a single live request.
