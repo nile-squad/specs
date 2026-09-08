@@ -76,8 +76,9 @@ accept exactly the same payload as their base actions.
 | `method` | string | no | `"mobileMoney"` or `"bank"`; defaults to `"mobileMoney"` |
 | `bank.accountNumber` | string | with `method: "bank"` | |
 | `bank.bankName` | string | with `method: "bank"` | |
-| `reference` | string | no | 13–15 characters (see [Reference constraints](./operations.md#reference-constraints)) |
+| `reference` | string | no | a valid UUID (see [Reference constraints](./operations.md#reference-constraints)) |
 | `metadata` | object | no | string keys to string values; defaults to `{}` |
+| `testOutcome` | string | no | `"success"` or `"fail"`; sandbox keys only, live keys return a `validation` error; omitted means random |
 
 **`sdk-make-payout`** (and `-and-resolve`):
 
@@ -93,8 +94,9 @@ accept exactly the same payload as their base actions.
 | `destination.bankName` | string | no | |
 | `destination.phone` | string | no | |
 | `description` | string | yes | |
-| `reference` | string | no | 13–15 characters |
+| `reference` | string | no | a valid UUID |
 | `metadata` | object | no | string keys to string values; defaults to `{}` |
+| `testOutcome` | string | no | `"success"` or `"fail"`; sandbox keys only, live keys return a `validation` error; omitted means random |
 
 **`sdk-get-status`**:
 
@@ -128,7 +130,7 @@ accept exactly the same payload as their base actions.
 | `description` | string | no | |
 | `dueDate` | string | no | |
 | `items[]` | array | no | max 50 of `{ name: string, quantity: number > 0, unitPrice: number > 0 }` |
-| `merchantReference` | string | no | 13–15 characters |
+| `merchantReference` | string | no | the merchant's own order label, any non-empty string. Not the same field as `reference` |
 | `tags[]` | array | no | |
 | `metadata` | object | no | string keys to string values; defaults to `{}` |
 
@@ -338,11 +340,14 @@ Vector V4 below catches every one of these escaping defaults.
 
 #### Request body additions
 
-- `_fingerprint`: SHA-256 hash of OS and runtime metadata, injected into every
-  authenticated request body. Its exact composition is an implementation choice
-  (the server treats it as an opaque stable identifier); it MUST be a stable
-  64-char lowercase hex value for the life of the process, and MUST match the
-  `fingerprint` used in `signatureInput`.
+- `_fingerprint`: SHA-256 hash of OS metadata, injected into every authenticated
+  request body. Its exact composition is an implementation choice (the server
+  treats it as an opaque stable identifier and never recomputes it, so
+  implementations need not agree with one another); it MUST be a stable 64-char
+  lowercase hex value for the life of the process, and MUST match the
+  `fingerprint` used in `signatureInput`. Implementations SHOULD NOT include a
+  language or runtime version, which is not obtainable the same way in every
+  language and changes the value on every upgrade for no benefit (see D4).
 
 #### Reference implementation
 

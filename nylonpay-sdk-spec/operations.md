@@ -31,25 +31,29 @@ Input shape:
   (`+256768499027`), international without `+` (`256768499027`), with or without
   spaces. See [Phone Number Normalization](./types.md#phone-number-normalization).
 - `description`: human-readable narration
-- `reference?`: merchant-supplied idempotency key (auto-generated if omitted). When supplied, it MUST be 13–15 characters (see [Reference constraints](#reference-constraints)).
+- `reference?`: merchant-supplied idempotency key (auto-generated if omitted). When supplied, it MUST be a valid UUID (see [Reference constraints](#reference-constraints)).
 - `method?`: payment method: `"mobileMoney"` or `"bank"` (defaults to `"mobileMoney"`)
 - `bank?`: required when `method` is `"bank"`: `{ accountNumber, bankName }`
 - `tags?`: up to 10 labels attached to the transaction for filtering and reporting. See [Smart Tags](#smart-tags).
 - `metadata?`: arbitrary key-value pairs attached to the transaction
+- `testOutcome?`: sandbox-only forced outcome: `"success"` always succeeds, `"fail"` always fails. Omitted, the sandbox picks a result at random. The SDK MUST validate the value synchronously and raise a `validation` error for anything else; the server rejects `testOutcome` on live keys with a `validation` error.
 
 Returns: `PaymentInstance`
 
 #### Reference constraints
 
-A supplied `reference` MUST be **13–15 characters** on every create operation
+A supplied `reference` MUST be a **valid UUID** on every create operation
 (`collectPayment`, `collectPaymentAndResolve`, `makePayout`, `makePayoutAndResolve`,
-`createInvoice`). The backend echoes the reference verbatim as the provider's
-`merchantTransactionId`, which is bounded to 13–15 characters; an out-of-range
-reference is rejected. Implementations MUST validate this **synchronously** at the
-call site (same as `amount`) and raise a `validation` error. They MUST NOT defer it
-to a network round-trip. An omitted `reference` is auto-generated as a 15-character
-value and always satisfies the constraint. Common pitfall: passing a 36-character
-UUID order id. Hash or truncate it to ≤15 characters first.
+`createInvoice`). Any UUID version is accepted, so a v1, v4 or v5 value all pass.
+Implementations MUST validate this **synchronously** at the call site (same as
+`amount`) and raise a `validation` error. They MUST NOT defer it to a network
+round-trip. An omitted `reference` is auto-generated, and implementations SHOULD
+generate a UUID v4.
+
+Provider identifier limits do not constrain what a merchant may pass here. Where a
+payment provider bounds the length of its own transaction identifier, the backend
+generates a separate internal value for that call and keeps the merchant reference
+intact.
 
 #### Reference uniqueness and replay
 
@@ -87,9 +91,10 @@ Input shape:
   `collectPayment`. See [Phone Number Normalization](./types.md#phone-number-normalization).
 - `destination`: `{ accountHolderName, accountNumber, bankName?, phone? }`
 - `description`: narration
-- `reference?`: idempotency key; when supplied, MUST be 13–15 characters (see [Reference constraints](#reference-constraints))
+- `reference?`: idempotency key; when supplied, MUST be a valid UUID (see [Reference constraints](#reference-constraints))
 - `tags?`: up to 10 labels. See [Smart Tags](#smart-tags).
 - `metadata?`: arbitrary key-value pairs
+- `testOutcome?`: sandbox-only forced outcome, same semantics as `collectPayment`.
 
 Returns: `PaymentInstance`
 

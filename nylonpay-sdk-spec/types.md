@@ -188,6 +188,7 @@ type CollectPaymentInput = {
   bank?: BankDetails;
   tags?: string[];
   metadata?: Record<string, string>;
+  testOutcome?: "success" | "fail";
 };
 
 type MakePayoutInput = {
@@ -199,6 +200,7 @@ type MakePayoutInput = {
   reference?: string;
   tags?: string[];
   metadata?: Record<string, string>;
+  testOutcome?: "success" | "fail";
 };
 
 type GetStatusInput = {

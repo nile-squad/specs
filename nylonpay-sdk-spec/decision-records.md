@@ -32,6 +32,19 @@ Part of the [Nylon Pay SDK Spec](./spec.md).
 - **Alternatives considered:** (a) No fingerprint. Rejected: the server uses it for anomaly detection. (b) Random per-process ID. Rejected: loses device identification value.
 - **Rationale:** OS and runtime metadata is stable per-process, unique per-server, and available in all target languages without external dependencies.
 - **Tradeoffs:** Hostname may change in containerized environments. Acceptable: the fingerprint is one signal among many, not a sole identifier.
+- **Amended 2026-09-08:** Language and runtime versions were removed from the
+  inputs. Two of the original claims did not hold. The server does not use the
+  fingerprint for anomaly detection: it reads `_fingerprint` from the request
+  body, feeds that value into its own HMAC, and never refers to it again. It is
+  not stored. It also does not bind a signature to a machine, since a replayed
+  request carries the fingerprint it was signed with; replay is prevented by the
+  nonce and timestamp. Because the server treats the value as opaque and never
+  recomputes it, composition is an implementation choice, SDKs need not agree
+  with one another, and changing it does not invalidate signatures from clients
+  built before the change. Runtime versions were the worst inputs on both
+  counts: not obtainable the same way in every language, and they churned the
+  value on every upgrade for no benefit. Remaining inputs are OS type, platform,
+  arch, release and hostname.
 
 ### D5: POST-only action-based transport
 
