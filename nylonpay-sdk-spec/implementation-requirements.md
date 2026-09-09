@@ -4,15 +4,15 @@ Part of the [Nylon Pay SDK Spec](./spec.md).
 
 Every SDK implementation must satisfy these requirements:
 
-### Typing
+## Typing
 
 Languages with type systems (TypeScript, Rust, Go, C#, Kotlin) must expose all types as public exports. Untyped languages (PHP) must provide type annotations via docblocks or equivalent. Python must provide type hints and ship with `py.typed` marker.
 
-### Documentation
+## Documentation
 
 Every public function, type, and constant must have a docstring/JSDoc/KDoc/doc comment. Documentation explains what the function does and why a merchant would call it, not implementation detail.
 
-### Tests
+## Tests
 
 Every SDK must ship a test suite covering:
 - Configuration validation (valid config, missing fields, invalid prefixes)
@@ -24,7 +24,7 @@ Every SDK must ship a test suite covering:
 - Webhook signature verification (valid, invalid, tampered, stale/replayed)
 - The canonical Security Test suite (S1–S21, see §Security Tests). Required, not optional
 
-### Edge Case Testing
+## Edge Case Testing
 
 Every SDK must test the following edge cases:
 
@@ -57,7 +57,7 @@ Every SDK must test the following edge cases:
 - Response signature over partial payload (some fields stripped)
 - Nonce uniqueness across rapid sequential requests
 
-**Polling and PaymentInstance:**
+## Polling and PaymentInstance
 - First poll returns `not found` (server hasn't propagated yet)
 - Status transitions: `pending` → `processing` → `successful`
 - Status transitions: `pending` → `failed` with failure reason
@@ -78,7 +78,7 @@ Every SDK must test the following edge cases:
 - Auto-generated references are unique across rapid sequential calls
 - Retry after 500 uses the same idempotency key (not a new one)
 
-### Security Tests
+## Security Tests
 
 Every SDK implementation **MUST** ship a dedicated security test suite covering the canonical cases below. These are the cross-language contract for the SDK's cryptographic surface; IDs (S1–S21) are traceable from this document to each SDK's test code. They run with mocked transport, no network required.
 
@@ -102,11 +102,11 @@ Every SDK implementation **MUST** ship a dedicated security test suite covering 
 | S16 | Signatures are accepted in one canonical form only: a correctly-computed signature re-spelled in uppercase hex is rejected. Verifying by comparing decoded bytes is case-blind and does not satisfy this. |
 | S17 | The response size cap is enforced during the read: an oversized body is rejected both when the server declares an oversized `Content-Length` AND when it sends no length at all (chunked), with the read aborted rather than completed-then-discarded. |
 | S18 | `0` tolerance is strict, not disabled: a stale webhook with `tolerance = 0` is rejected, and only the explicit disable sentinel accepts it. |
-| S19 | The SDK reproduces every [conformance vector](./transport.md#conformance-vectors) (V1–V7) exactly, both the canonical string and the hex signature, as a unit test. V7 is not optional: it is the only vector that distinguishes true UTF-16 code-unit ordering from locale collation, UTF-16LE byte ordering, and code-point ordering. |
+| S19 | The SDK reproduces every [conformance vector](./security.md#conformance-vectors) (V1–V7) exactly, both the canonical string and the hex signature, as a unit test. V7 is not optional: it is the only vector that distinguishes true UTF-16 code-unit ordering from locale collation, UTF-16LE byte ordering, and code-point ordering. |
 | S20 | Client-side validation rejects a non-integer `amount`, `items[].quantity`, or `items[].unitPrice` with a `validation` error before any signing or network call (invariant 33). |
 | S21 | The signed `fingerprint` equals the `_fingerprint` in the request body (invariant 34), and the signature is computed over the inner payload only, a signature computed over the full `{intent, service, action, payload}` envelope is rejected by the backend. |
 
-### Integration Tests
+## Integration Tests
 
 Every SDK must ship an integration test suite that runs against a real sandbox backend (not mocked transport). The suite verifies end-to-end contract compliance: real HTTP calls, real server-side validation, real idempotency behavior, and real error responses.
 
@@ -154,7 +154,7 @@ Every SDK must ship an integration test suite that runs against a real sandbox b
 - Every SDK language runs the same canonical tests (I1–I19). Language-specific additions are permitted but must not replace or weaken the canonical set.
 - Test names must reference the spec ID (e.g., `I3: idempotency on collect`) so coverage audits can trace from spec to implementation.
 
-### Spec Compliance
+## Spec Compliance
 
 No SDK adds operations, parameters, events, or behavior beyond what this spec defines. If a feature is needed across SDKs, this spec updates first, then all implementations follow. Language-specific conveniences (e.g., helper functions that compose existing operations) are permitted only if they do not introduce new server interactions or alter the documented contract.
 

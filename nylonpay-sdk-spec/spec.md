@@ -1,6 +1,6 @@
 # Nylon Pay SDK Spec
 
-**Version:** 2.1.0
+**Version:** 2.1.0. See the [Changelog](./changelog.md) for version history.
 
 > Canonical, language-agnostic specification for the Nylon Pay SDK. Implement it
 > in any language; the [TypeScript SDK](https://github.com/nile-squad/nylonpay-ts)
@@ -12,6 +12,15 @@ The Nylon Pay SDK is the merchant's programmatic interface to the payment platfo
 
 All SDKs are server-side. Client-side packages (browser, mobile) are a future scope.
 
+## Start Here: The Build Guide
+
+**Implementing a new SDK? Read the [Build Guide](./build-guide.md) first.** It is
+the recipe: it lists the components you build overall, then walks you through
+them in dependency order: signing core, types, validation, transport, factory,
+operations, polling, webhooks, with a **Verify** gate closing each step, so
+you prove each piece before wiring the next. The rest of this spec is the
+reference that the guide points at; the guide is the order to build it in.
+
 ## Documents
 
 The spec is split into focused documents. This page is the entry point; each
@@ -19,17 +28,20 @@ document is self-contained for its topic and links back here.
 
 | Document | What it covers |
 |----------|----------------|
-| [Principles](./principles.md) | The six design principles every SDK follows |
+| [Build Guide](./build-guide.md) | **Start here when implementing:** the components and the build order, step by step |
+| [Principles](./principles.md) | The ten design principles every SDK follows |
 | [Operations](./operations.md) | Every operation: inputs, outputs, reference constraints, hosted invoice behavior |
 | [PaymentInstance Contract](./payment-instance.md) | The event-driven instance returned by async operations: events, polling lifecycle, `wait()` |
 | [Types and Events](./types.md) | Type definitions, the Transaction shape, and the webhook event catalog |
-| [Transport Contract](./transport.md) | Endpoint, request envelope, per-action payload validation, a worked request/response example, signing (with reference implementations and conformance vectors), and response verification |
+| [Transport Contract](./transport.md) | Endpoint, request envelope, per-action payload validation, a worked request/response example, retry policy, and status polling |
+| [Security](./security.md) | Signing protocol (canonical payload, request headers, `_fingerprint`, conformance vectors, server-side checks), response verification and size bounds, webhook integrity, secret handling |
 | [Error Categories](./errors.md) | The fixed error taxonomy and how categories travel on the wire |
 | [Configuration](./configuration.md) | Factory configuration: keys, base URL, timeouts, hooks |
 | [Implementation Requirements](./implementation-requirements.md) | Unit, integration (I1–I19), and security (S1–S21) test suites; spec compliance rules |
 | [Invariants and Prohibitions](./invariants-and-prohibitions.md) | The numbered guarantees every implementation upholds and the things no SDK ever does |
 | [Decision Records](./decision-records.md) | D1–D21: why the contract is the way it is |
-| [Follow-Up Work](./follow-up-work.md) | F1–F7: deferred scope and resolved findings |
+| [Follow-Up Work](./follow-up-work.md) | F1–F5: deferred scope |
+| [Changelog](./changelog.md) | Version history and the current spec version |
 
 ## How to Read This Spec
 
@@ -37,11 +49,12 @@ Pick the path that matches what you came for:
 
 | You want to… | Read |
 |--------------|------|
-| Build a new SDK from scratch | [Principles](./principles.md) → [Operations](./operations.md) → [Transport Contract](./transport.md) → [PaymentInstance Contract](./payment-instance.md) → [Types and Events](./types.md) → [Implementation Requirements](./implementation-requirements.md) |
-| Wire up raw backend calls (no SDK yet) | [Transport Contract](./transport.md), especially [Action Payloads](./transport.md#action-payloads) |
-| Understand *why* something is the way it is | [Decision Records](./decision-records.md) (D1–D17) |
+| Build a new SDK from scratch | [Build Guide](./build-guide.md) (the recipe, in order), then the reference docs it points to |
+| Wire up raw backend calls (no SDK yet) | [Transport Contract](./transport.md) and [Security](./security.md), especially [Action Payloads](./transport.md#action-payloads) and [Request Signing](./security.md#request-signing) |
+| Understand *why* something is the way it is | [Decision Records](./decision-records.md) (D1–D21) |
 | Audit or review an implementation | [Invariants and Prohibitions](./invariants-and-prohibitions.md) and the test suites in [Implementation Requirements](./implementation-requirements.md) |
-| Check what is intentionally not done yet | [Follow-Up Work](./follow-up-work.md) (F1–F7) |
+| Check what is intentionally not done yet | [Follow-Up Work](./follow-up-work.md) (F1–F5) |
+| Follow the spec's history or current version | [Changelog](./changelog.md) |
 
 Normative language: **MUST**/**MUST NOT** are hard requirements verified by the
 canonical test suites; everything else is contract description. Decision records

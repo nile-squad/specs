@@ -18,18 +18,21 @@ implementations follow.
 
 ## Implementing an SDK from a spec
 
-1. Read the spec end to end, principles, decision records, operations, types,
-   transport contract, invariants, and prohibitions.
-2. Match names, shapes, events, and status values exactly. Only casing adapts to
+1. **Start with the [Build Guide](./nylonpay-sdk-spec/build-guide.md)** — the
+   recipe that lists the components and the order to build them in, with a
+   verify step at the end of each stage.
+2. Read the spec end to end, principles, decision records, operations, types,
+   transport contract, security, invariants, and prohibitions.
+3. Match names, shapes, events, and status values exactly. Only casing adapts to
    each language's conventions (`collectPayment` / `collect_payment` /
    `CollectPayment`).
-3. Use the reference implementation to resolve ambiguity, then mirror its public
+4. Use the reference implementation to resolve ambiguity, then mirror its public
    surface, not its internal structure.
-4. Ship the test suite the spec requires (signing, response verification,
+5. Ship the test suite the spec requires (signing, response verification,
    lifecycle, retries, webhook verification, and the listed edge cases).
 
 ## Versioning
 
-Specs are versioned independently (see the `Version` field in each document).
-Breaking changes bump the major version and are called out in the spec's
-follow-up/changelog section.
+Specs are versioned independently (see the `Version` field in each spec, which
+points at the spec's [changelog](./nylonpay-sdk-spec/changelog.md)). Breaking
+changes bump the major version and are recorded there.

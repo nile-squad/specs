@@ -52,11 +52,31 @@ type WebhookEventType =
   | "transaction.cancelled";
 
 type Currency = "USD" | "EUR" | "GBP" | "KES" | "UGX" | "TZS" | "RWF";
+```
 
-// Every hook is wrapped: `fn` is the handler, `onError` (required) receives any
-// throw/rejection from `fn`, and `enabled` (default true) toggles it off.
-// The SDK runs `fn` inside a safe boundary so merchant code can never crash the
-// payment flow. Failures route to `onError` instead of bubbling.
+### The `Result` shape
+
+One `Result` type is used everywhere a spec signature reads `Result<T, E>`
+(hook callbacks, error results):
+
+```typescript
+type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
+```
+
+`ok: true` carries the `value`; `ok: false` carries the structure `SdkError`
+(`E` = `SdkError` in most read positions, though hook callbacks spell it
+`string`, see [Error Categories](./errors.md)). Sync and blocking operations
+return this shape; only `collectPayment`/`makePayout` return a PaymentInstance
+and a `wait()` promise instead.
+
+### Hooks
+
+Every hook is wrapped: `fn` is the handler, `onError` (required) receives any
+throw/rejection from `fn`, and `enabled` (default true) toggles it off.
+The SDK runs `fn` inside a safe boundary so merchant code can never crash the
+payment flow. Failures route to `onError` instead of bubbling.
+
+```typescript
 type SdkHook<Fn> = {
   enabled?: boolean; // default true
   fn: Fn;
@@ -109,7 +129,7 @@ type NylonPayConfig = {
   onDelayed?: "wait" | "return";
   /** Custom fetch implementation. Defaults to `globalThis.fetch`. Essential for edge runtimes and testing. */
   fetch?: typeof globalThis.fetch;
-  /** Force a new instance even if one already exists for this key+secret+url. Defaults to `false`. See D11. */
+  /** Force a new instance even if one already exists for this key+secret+url. Defaults to `false`. See invariant 27. */
   force?: boolean;
   hooks?: SdkHooks;
 };
@@ -121,7 +141,7 @@ type Customer = {
   email?: string;
 };
 
-#### Phone Number Normalization
+### Phone Number Normalization
 
 Every `phoneNumber` field accepted by the SDK is normalized to international format
 (`256XXXXXXXXX`) before it reaches the backend. The normalization runs at three
@@ -234,7 +254,8 @@ type CreateInvoiceInput = {
 type ListTransactionsInput = {
   tags?: string[];
   status?: TransactionStatus;
-  type?: "collection" | "payout" | "invoice";
+  /** The full TransactionType union. Reproduced verbatim: charge maps to "collection" for merchant-owned charges, but every published value is filterable, matching the reference SDKs. */
+  type?: TransactionType;
   limit?: number;   // 1–100, default 20
   offset?: number;  // default 0
   createdAfter?: string;  // ISO 8601
@@ -267,6 +288,17 @@ type VerifyWebhookInput = {
   payload: string | Uint8Array;
   signature: string;
   secret: string;
+  /**
+   * Replay-protection window in seconds. After the signature is verified, the
+   * timestamp carried inside the signed body must be within this many seconds of
+   * now, or verification fails. Defaults to 300 (5 minutes).
+   *
+   * `0` means a tolerance of zero seconds, maximum strictness, which rejects
+   * essentially everything. It does NOT disable the check. To opt out, pass the
+   * exported `DISABLE_FRESHNESS_CHECK` sentinel deliberately (not recommended;
+   * a captured webhook then verifies forever).
+   */
+  toleranceSeconds?: number;
 };
 
 type Transaction = {

@@ -18,7 +18,7 @@ The SDK exposes ten operations and one utility:
 | `createInvoice` | Sync | Generate a hosted payment link with optional line items |
 | `verifyWebhookSignature` | Utility | Verify HMAC signature of an incoming webhook payload |
 
-### collectPayment
+## collectPayment
 
 Initiates a payment collection. Returns a PaymentInstance that polls until the transaction reaches a terminal state.
 
@@ -40,7 +40,7 @@ Input shape:
 
 Returns: `PaymentInstance`
 
-#### Reference constraints
+## Reference constraints
 
 A supplied `reference` MUST be a **valid UUID** on every create operation
 (`collectPayment`, `collectPaymentAndResolve`, `makePayout`, `makePayoutAndResolve`,
@@ -55,7 +55,7 @@ payment provider bounds the length of its own transaction identifier, the backen
 generates a separate internal value for that call and keeps the merchant reference
 intact.
 
-#### Reference uniqueness and replay
+## Reference uniqueness and replay
 
 The reference is the transaction identity and the only idempotency mechanism.
 There is no separate idempotency key.
@@ -71,7 +71,7 @@ There is no separate idempotency key.
 - Retrying a network failure (5xx/timeout) MUST reuse the same reference so the
   retry replays instead of double-charging.
 
-### collectPaymentAndResolve
+## collectPaymentAndResolve
 
 Initiates a payment collection and blocks until the transaction reaches a terminal state. Equivalent to calling `collectPayment` then `wait()`, but provided as a single operation for convenience in synchronous contexts. When the server's inline poll budget (~60s) ends still pending, the SDK continues client-side status polling until terminal (or merchant caps / `onDelayed: "return"`).
 
@@ -79,7 +79,7 @@ Input shape: same as `collectPayment`.
 
 Returns: `Transaction` on success, error result on failure/cancellation/timeout.
 
-### makePayout
+## makePayout
 
 Initiates a disbursement. Returns a PaymentInstance that polls until the payout reaches a terminal state.
 
@@ -98,7 +98,7 @@ Input shape:
 
 Returns: `PaymentInstance`
 
-### makePayoutAndResolve
+## makePayoutAndResolve
 
 Initiates a disbursement and blocks until the payout reaches a terminal state. Equivalent to calling `makePayout` then `wait()`, but provided as a single operation for convenience in synchronous contexts. When the server's inline poll budget ends still pending, the SDK continues client-side status polling until terminal (or merchant caps / `onDelayed: "return"`).
 
@@ -106,7 +106,7 @@ Input shape: same as `makePayout`.
 
 Returns: `Transaction` on success, error result on failure/cancellation/timeout.
 
-### getStatus
+## getStatus
 
 One-shot status check. Does not poll. Returns the current transaction state.
 
@@ -115,7 +115,7 @@ Input shape:
 
 Returns: `{ reference, status, amount, currency, updatedAt, delayed? }`
 
-### getTransaction
+## getTransaction
 
 Full transaction lookup.
 
@@ -127,14 +127,14 @@ At least one of `id` or `reference` is required.
 
 Returns: full transaction record (see [Transaction Shape](./types.md#transaction-shape))
 
-### listTransactions
+## listTransactions
 
 Returns a paginated list of transactions for the authenticated account, with optional filters.
 
 Input shape (`ListTransactionsInput`, all fields optional):
 - `tags?`: array of tag strings. Uses **AND semantics**: only transactions carrying **all** listed tags are returned.
 - `status?`: filter by status: `"pending"`, `"processing"`, `"on_hold"`, `"successful"`, `"failed"`, `"cancelled"`
-- `type?`: filter by type: `"collection"`, `"payout"`, `"invoice"`
+- `type?`: filter by type: the full `TransactionType` union (see [Types](./types.md)). The values merchants actually filter by are `"collection"`, `"payout"`, and `"invoice"`
 - `limit?`: results per page, 1–100 (default `20`)
 - `offset?`: zero-based pagination offset (default `0`)
 - `createdAfter?`: ISO 8601 datetime, earliest creation time (inclusive)
@@ -144,7 +144,7 @@ Returns: `ListTransactionsResponse`, `{ transactions: TransactionSummary[], coun
 
 `count` is the total number of matching transactions (useful for pagination). `tags` echoes the filter tags applied.
 
-### getTransactionsByTag
+## getTransactionsByTag
 
 Shorthand for filtering by a single tag. Accepts one required `tag` argument plus any `ListTransactionsInput` options except `tags`.
 
@@ -152,7 +152,7 @@ Equivalent to `listTransactions({ tags: [tag], ...options })`.
 
 Returns: `ListTransactionsResponse`
 
-### Smart Tags
+## Smart Tags
 
 Tags are short labels attached to a transaction at creation time. They persist on the transaction record and can be used to filter or group transactions by campaign, product, team, channel, or any merchant-defined dimension.
 
@@ -167,7 +167,7 @@ Tags are short labels attached to a transaction at creation time. They persist o
 
 **Filter semantics:** `listTransactions({ tags: ["a", "b"] })` returns only transactions that carry **both** `"a"` and `"b"`, not either.
 
-### verifyPhone
+## verifyPhone
 
 Pre-validates a phone number with the payment provider. Returns the registered name on the account.
 
@@ -179,7 +179,7 @@ Input shape:
 
 Returns: `{ phoneNumber, customerName, verified }`
 
-### createInvoice
+## createInvoice
 
 Generates a hosted invoice and emails it to the customer. The returned payment link directs the customer to a mobile-money checkout page.
 
@@ -200,7 +200,7 @@ Returns: `{ id, invoiceNumber, paymentLink, amount, currency, status }`
 
 The customer receives an email containing the `paymentLink`. Opening it shows a mobile-money payment page where the customer enters their phone number to complete the payment. A receipt email is sent automatically after a successful payment.
 
-### verifyWebhookSignature
+## verifyWebhookSignature
 
 Standalone utility. Verifies that a webhook was genuinely sent by Nylon Pay and
 is not a replay.
