@@ -38,6 +38,17 @@ type PaymentMethod = "mobileMoney" | "bank";
 
 type TransactionMode = "test" | "live";
 
+type FailureCategory = "provider" | "customer" | "internal" | "validation";
+
+type FailureCode =
+  | "provider_rejection"
+  | "customer_timeout"
+  | "insufficient_balance"
+  | "invalid_number"
+  | "internal_error"
+  | "limit_exceeded"
+  | "cancelled";
+
 type PaymentEvent =
   | "processing"
   | "success"
@@ -51,7 +62,7 @@ type WebhookEventType =
   | "transaction.processing"
   | "transaction.cancelled";
 
-type Currency = "USD" | "EUR" | "GBP" | "KES" | "UGX" | "TZS" | "RWF";
+type Currency = "USD" | "EUR" | "GBP" | "KES" | "UGX" | "TZS" | "RWF" | "CDF";
 ```
 
 ### The `Result` shape
@@ -208,7 +219,7 @@ type CollectPaymentInput = {
   bank?: BankDetails;
   tags?: string[];
   metadata?: Record<string, string>;
-  testOutcome?: "success" | "fail";
+  testOutcome?: "success" | "fail" | FailureCode;
 };
 
 type MakePayoutInput = {
@@ -220,7 +231,7 @@ type MakePayoutInput = {
   reference?: string;
   tags?: string[];
   metadata?: Record<string, string>;
-  testOutcome?: "success" | "fail";
+  testOutcome?: "success" | "fail" | FailureCode;
 };
 
 type GetStatusInput = {
@@ -322,6 +333,8 @@ type Transaction = {
   phone: string;
   email: string | null;
   failureReason: string | null;
+  failureCategory?: FailureCategory | null;
+  failureCode?: FailureCode | null;
   /**
    * Humanized status description. For `on_hold` statuses, this provides
    * a plain-language explanation (e.g., "Payout is being reviewed and will
@@ -342,6 +355,11 @@ type StatusResponse = {
   status: TransactionStatus;
   amount: number;
   currency: Currency;
+  id: string;
+  operatorTid: string | null;
+  failureReason: string | null;
+  failureCategory?: FailureCategory | null;
+  failureCode?: FailureCode | null;
   /**
    * Humanized status description. For `on_hold` statuses, this provides
    * a plain-language explanation (e.g., "Payout is being reviewed and will
@@ -361,8 +379,9 @@ type PhoneVerification = {
 
 type InvoiceResponse = {
   id: string;
-  invoiceNumber: string;
+  invoiceNumber: string | null;
   paymentLink: string;
+  url?: string;
   amount: string;
   currency: string;
   status: string;
@@ -402,6 +421,10 @@ type WebhookTransactionSnapshot = {
   method: PaymentMethod | null;
   mode: TransactionMode | null;
   failureReason: string | null;
+  failureCategory?: FailureCategory | null;
+  failureCode?: FailureCode | null;
+  /** Present on collections this window while `charge` is deprecated. */
+  legacyType?: "charge";
   operatorTid: string | null;
 };
 ```

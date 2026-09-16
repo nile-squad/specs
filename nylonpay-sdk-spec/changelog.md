@@ -11,7 +11,16 @@ here, not in the spec body.
 
 ## Current version
 
-**2.1.0**
+**2.2.0**
+
+
+## 2.2.0
+
+- `Currency` includes `CDF` for DR Congo, next to `KES`, `TZS`, `RWF`, and `UGX`.
+- Bank payouts stay on `makePayout` / `makePayoutAndResolve`. Set
+  `destination.bankName` and put the account number in `destination.accountNumber`.
+- Airtime, data, and bill payments are dashboard-only. They are not SDK
+  operations. Do not add `payAirtime` or `payBill` methods.
 
 
 ## 2.1.0

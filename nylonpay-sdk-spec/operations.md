@@ -18,6 +18,9 @@ The SDK exposes ten operations and one utility:
 | `createInvoice` | Sync | Generate a hosted payment link with optional line items |
 | `verifyWebhookSignature` | Utility | Verify HMAC signature of an incoming webhook payload |
 
+Airtime, data, and bill payments live on the merchant dashboard Utilities
+page. They are not SDK operations. Do not add methods for them.
+
 ## collectPayment
 
 Initiates a payment collection. Returns a PaymentInstance that polls until the transaction reaches a terminal state.
@@ -89,7 +92,9 @@ Input shape:
 - `customer`: `{ name, phoneNumber, email? }`. The `phoneNumber` is normalized
   automatically to international format (`256XXXXXXXXX`). Same accepted formats as
   `collectPayment`. See [Phone Number Normalization](./types.md#phone-number-normalization).
-- `destination`: `{ accountHolderName, accountNumber, bankName?, phone? }`
+- `destination`: `{ accountHolderName, accountNumber, bankName?, phone? }`.
+  For a bank payout, set `bankName` and put the account number in
+  `accountNumber`. For mobile money, omit `bankName` and use the wallet number.
 - `description`: narration
 - `reference?`: idempotency key; when supplied, MUST be a valid UUID (see [Reference constraints](#reference-constraints))
 - `tags?`: up to 10 labels. See [Smart Tags](#smart-tags).
