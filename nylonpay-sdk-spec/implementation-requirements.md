@@ -47,6 +47,13 @@ Every SDK must test the following edge cases:
 - Server returns 401 (invalid credentials)
 - Server returns 422 (validation error)
 - Request timeout mid-stream (connection established but response never arrives)
+- `unreachable` classification: DNS / no-route is `host has no internet connection`; connection refused / 502–504 is `Nylon Pay services seem to be down`
+- A second `send` while still down inside the re-check pause does not hit the network
+- A successful round-trip skips further reachability checks for 5 minutes
+- After an unreachable failure, the next `send` after the re-check pause checks before the signed request
+- HTTP 4xx reports its server error through `onError`, not as `unreachable`
+- An unreachable result older than 5 minutes is not reused; the next send checks again
+- A final operation error calls the configured global `onError` once
 
 **Signing and security:**
 - Canonical payload with nested objects and arrays (deterministic ordering)

@@ -11,7 +11,43 @@ here, not in the spec body.
 
 ## Current version
 
-**2.2.0**
+**2.4.0**
+
+
+## 2.4.0
+
+- `NylonPayConfig.onError` receives final structured operation errors, including
+  `code: "unreachable"`. A successful round-trip skips further reachability
+  checks for 5 minutes. A check older than 5 minutes is stale: the SDK checks
+  again and MUST NOT return `unreachable` from hours-old memory. After a
+  failure, the next SDK operation is checked before it is attempted.
+- The default per-request timeout is 90 seconds. Poll duration and poll count
+  have no default cap; merchants can set either cap explicitly.
+  See [Configuration](./configuration.md#offline-and-nylon-down) and
+  [D22](./decision-records.md#d22-reachability-checks-only-when-there-is-no-recent-success).
+
+
+## 2.3.0
+
+- `getStatus` returns `id`, `operatorTid`, failure fields, `statusText`, and
+  `delayed`, matching the `StatusResponse` type.
+- `testOutcome` accepts Nylon failure-code literals as well as `"success"` and
+  `"fail"`. Client-side validation MUST use the same set the backend accepts.
+- Error messages may carry an optional `-- error-code: <code>` suffix after
+  `-- error-type: <category>`. `parseError` reads it onto `SdkError.code`.
+- Clients send `x-nylon-features` listing wire additions they can parse. The
+  backend withholds unlisted additions. Current value: `error-code`.
+- `on_hold` is a non-terminal status. Webhook collections send `type:
+  "collection"` plus `legacyType: "charge"` this window.
+
+
+## 2.2.1
+
+- Phone normalization is per market, not Uganda-only. Local `0…` numbers take
+  the payment currency's dial code (UGX `256`, KES `254`, TZS `255`, RWF `250`,
+  CDF `243`). International numbers keep the calling code they already carry.
+  `verifyPhone` has no currency: local `0…` is Uganda; other markets use
+  `+254…` / `254…` (and the other live calling codes).
 
 
 ## 2.2.0

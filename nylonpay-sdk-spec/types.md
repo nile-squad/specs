@@ -56,6 +56,10 @@ type PaymentEvent =
   | "cancelled"
   | "error";
 
+type UnreachableReason =
+  | "host has no internet connection"
+  | "Nylon Pay services seem to be down";
+
 type WebhookEventType =
   | "transaction.successful"
   | "transaction.failed"
@@ -64,6 +68,9 @@ type WebhookEventType =
 
 type Currency = "USD" | "EUR" | "GBP" | "KES" | "UGX" | "TZS" | "RWF" | "CDF";
 ```
+
+`UnreachableReason` is used as the message for `SdkError.code` equal to
+`"unreachable"`. See [Offline and Nylon down](./configuration.md#offline-and-nylon-down).
 
 ### The `Result` shape
 
@@ -125,6 +132,8 @@ type SdkHooks = {
   >;
 };
 
+type SdkErrorHandler = (error: SdkError) => void | Promise<void>;
+
 type NylonPayConfig = {
   apiKey: string;
   apiSecret: string;
@@ -143,36 +152,45 @@ type NylonPayConfig = {
   /** Force a new instance even if one already exists for this key+secret+url. Defaults to `false`. See invariant 27. */
   force?: boolean;
   hooks?: SdkHooks;
+  /** Handle structured errors returned by operations on this SDK instance. */
+  onError?: SdkErrorHandler;
 };
 
 type Customer = {
   name: string;
-  /** Phone number in any common format, normalized automatically to international format */
+  /** Phone number in any common format, normalized to digits with the market's calling code */
   phoneNumber: string;
   email?: string;
 };
 
 ### Phone Number Normalization
 
-Every `phoneNumber` field accepted by the SDK is normalized to international format
-(`256XXXXXXXXX`) before it reaches the backend. The normalization runs at three
-layers for defense-in-depth:
+Every `phoneNumber` field accepted by the SDK is normalized to digits with the
+market's calling code (no `+`) before it reaches the backend. Uganda is `256…`,
+Kenya `254…`, Tanzania `255…`, Rwanda `250…`, DR Congo `243…`. The
+normalization runs at three layers for defense-in-depth:
 
-1. **SDK (client-side):** `normalizePhone()` runs synchronously before the request
-   is signed and sent. The wire payload always carries the normalized number.
-2. **Backend Zod schema:** `phoneNumberSchema` validates then transforms the
-   number to normalized form. Catches callers that bypass the SDK.
-3. **Provider formatters:** `formatPhoneForPivot()` normalizes before handing the
-   number to the provider. Defense-in-depth at the provider boundary.
+1. **SDK (client-side):** `normalizePhone(phone, currency)` runs synchronously
+   before the request is signed and sent. The wire payload always carries the
+   normalized number.
+2. **Backend Zod schema:** collect/payout validate the number for the payment
+   currency. `verifyPhone` and KYC accept any live market.
+3. **Provider formatters:** strip `+`/spaces again before handing the number to
+   the provider. They do not force Uganda.
 
 Normalization rules:
 
 | Rule | Example |
 |------|---------|
-| Strip all whitespace | `+256 768 499 027` → `+256768499027` |
-| Strip leading `+` | `+256768499027` → `256768499027` |
-| If starts with `0` and length is 10, prepend `256` | `0768499027` → `256768499027` |
-| Already normalized passes through | `256768499027` → `256768499027` |
+| Strip all whitespace | `+254 710 000 000` → `+254710000000` |
+| Strip leading `+` | `+254710000000` → `254710000000` |
+| If starts with `0` and length is 10, prepend the **currency's** dial code | UGX `0768499027` → `256768499027`; KES `0710000000` → `254710000000` |
+| International numbers already carrying a calling code pass through | `254710000000` → `254710000000` |
+
+Dial codes: UGX `256`, KES `254`, TZS `255`, RWF `250`, CDF `243`. Unknown
+currency uses `256`. `verifyPhone` has no currency: a local `0…` number is
+treated as Uganda; other markets must be passed in international form
+(`+254…`, `254…`).
 
 The normalized result is what gets stored in the `Transaction.phone` field and sent
 to payment providers.
@@ -181,14 +199,15 @@ to payment providers.
 
 | Format | Pattern | Example |
 |--------|---------|---------|
-| Local (10-digit) | `0XXXXXXXXX` | `0768499027` |
-| International with `+` | `+256XXXXXXXXX` | `+256768499027` |
-| International without `+` | `256XXXXXXXXX` | `256768499027` |
-| With spaces (any format) | n/a | `+256 768 499 027`, `256 768 499 027` |
+| Local (10-digit) | `0XXXXXXXXX` | `0768499027` (UGX), `0710000000` (KES) |
+| International with `+` | `+<dial>XXXXXXXXX` | `+256768499027`, `+254710000000` |
+| International without `+` | `<dial>XXXXXXXXX` | `256768499027`, `254710000000` |
+| With spaces (any format) | n/a | `+256 768 499 027`, `+254 710 000 000` |
 
 Merchants can pass phone numbers in any of these formats. The system handles
 normalization. The merchant does not need to format numbers before calling
-the SDK.
+the SDK. A collect or payout still requires the number to belong to the
+payment currency's market.
 
 type Destination = {
   accountHolderName: string;
@@ -329,7 +348,7 @@ type Transaction = {
   // paying customer sees on their receipt. For cross-validating customer pay
   // claims. Null until the operator reports it (typically at terminal status).
   operatorTid?: string | null;
-  /** Normalized international format (256XXXXXXXXX), see Phone Number Normalization below */
+  /** Normalized digits with the market's calling code, see Phone Number Normalization */
   phone: string;
   email: string | null;
   failureReason: string | null;

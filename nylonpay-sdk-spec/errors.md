@@ -15,19 +15,38 @@ type SdkErrorCategory =
   | "duplicate"   // reference already used for another transaction, retry with a NEW reference
   | "not_found"   // referenced transaction does not exist
   | "internal"    // unexpected server-side failure
-  | "network"     // request never reached the server (DNS, TLS, connection)
+  | "network"     // request could not complete (connection or service failure)
   | "timeout";    // request exceeded the configured timeout
 
 type SdkError = {
   category: SdkErrorCategory;
   message: string;
   retryable?: boolean;
+  /** Optional Nylon code, present when the client declared `error-code`. */
+  code?: string;
 };
 ```
 
 - `auth`, `validation`, `limit`, `rate_limit`, `account`, `provider`, `duplicate`, `not_found`, `internal` are server-tagged via the message suffix.
-- `network`, `timeout` are produced by the SDK transport when the request never completed.
+- `network`, `timeout` are produced by the SDK transport when the request could
+  not complete. `network` covers connection failures and service-unavailable
+  responses; `timeout` means the configured time limit expired.
+- A skipped call (still down inside the re-check pause) is `category: "network"`,
+  `code: "unreachable"`, `message` equal to the `unreachable` reason string.
+  See [Offline and Nylon down](./configuration.md#offline-and-nylon-down).
 - Merchants branch on `category`, never on `message` text or HTTP status.
+- An optional `-- error-code: <code>` may follow `-- error-type: <category>` when the client listed `error-code` in `x-nylon-features`. `parseError` copies it to `SdkError.code`. Do not emit the code suffix to clients that cannot parse it; those parsers would drop the category.
+
+## Global error handler
+
+`NylonPayConfig.onError` receives the structured `SdkError` returned by an
+operation on the SDK instance. It also receives errors skipped by the
+reachability guard. Retries are internal, so one final operation error produces
+one handler call. Handler failures MUST be contained.
+
+The handler does not replace PaymentInstance `"error"` events or `Result` error
+values. It provides one place for instance-wide logging and unreachable
+handling.
 
 ## Message style, humanized, no internal mechanics
 

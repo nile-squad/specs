@@ -29,17 +29,23 @@ Input shape:
 - `amount`: positive integer in smallest currency unit (e.g., cents, shillings)
 - `currency`: ISO 4217 currency code
 - `customer`: `{ name, phoneNumber, email? }`. The `phoneNumber` is normalized
-  automatically to international format (`256XXXXXXXXX`) by the SDK before the
-  request leaves. Accepted formats: local (`0768499027`), international with `+`
-  (`+256768499027`), international without `+` (`256768499027`), with or without
-  spaces. See [Phone Number Normalization](./types.md#phone-number-normalization).
+  automatically to digits with the market's calling code (UGX `256…`, KES
+  `254…`, and so on) by the SDK before the request leaves. Accepted formats:
+  local (`0768499027` on UGX, `0710000000` on KES), international with `+`
+  (`+256768499027`, `+254710000000`), international without `+`, with or
+  without spaces. See [Phone Number Normalization](./types.md#phone-number-normalization).
 - `description`: human-readable narration
 - `reference?`: merchant-supplied idempotency key (auto-generated if omitted). When supplied, it MUST be a valid UUID (see [Reference constraints](#reference-constraints)).
 - `method?`: payment method: `"mobileMoney"` or `"bank"` (defaults to `"mobileMoney"`)
 - `bank?`: required when `method` is `"bank"`: `{ accountNumber, bankName }`
 - `tags?`: up to 10 labels attached to the transaction for filtering and reporting. See [Smart Tags](#smart-tags).
 - `metadata?`: arbitrary key-value pairs attached to the transaction
-- `testOutcome?`: sandbox-only forced outcome: `"success"` always succeeds, `"fail"` always fails. Omitted, the sandbox picks a result at random. The SDK MUST validate the value synchronously and raise a `validation` error for anything else; the server rejects `testOutcome` on live keys with a `validation` error.
+- `testOutcome?`: sandbox-only forced outcome. `"success"` always succeeds.
+  `"fail"` always fails. A Nylon failure-code literal forces that labelled fail.
+  Omitted, the sandbox picks a result at random. The SDK MUST validate the value
+  synchronously against `"success"`, `"fail"`, and the FailureCode union, and
+  raise a `validation` error for anything else. The server rejects `testOutcome`
+  on live keys with a `validation` error.
 
 Returns: `PaymentInstance`
 
@@ -90,8 +96,8 @@ Input shape:
 - `amount`: positive integer
 - `currency`: ISO 4217
 - `customer`: `{ name, phoneNumber, email? }`. The `phoneNumber` is normalized
-  automatically to international format (`256XXXXXXXXX`). Same accepted formats as
-  `collectPayment`. See [Phone Number Normalization](./types.md#phone-number-normalization).
+  automatically to digits with the market's calling code. Same accepted formats
+  as `collectPayment`. See [Phone Number Normalization](./types.md#phone-number-normalization).
 - `destination`: `{ accountHolderName, accountNumber, bankName?, phone? }`.
   For a bank payout, set `bankName` and put the account number in
   `accountNumber`. For mobile money, omit `bankName` and use the wallet number.
@@ -118,7 +124,10 @@ One-shot status check. Does not poll. Returns the current transaction state.
 Input shape:
 - `reference`: transaction reference
 
-Returns: `{ reference, status, amount, currency, updatedAt, delayed? }`
+Returns: `StatusResponse` (see [Types](./types.md)). Always includes
+`reference`, `status`, `amount`, `currency`, `id`, `operatorTid`,
+`failureReason`, and `updatedAt`. May include `failureCategory`, `failureCode`,
+`statusText`, and `delayed`.
 
 ## getTransaction
 
@@ -177,9 +186,11 @@ Tags are short labels attached to a transaction at creation time. They persist o
 Pre-validates a phone number with the payment provider. Returns the registered name on the account.
 
 Input shape:
-- `phoneNumber`: any accepted format (local `0XXXXXXXXX`, international `+256XXXXXXXXX`
-  or `256XXXXXXXXX`, with or without spaces). The backend normalizes it to international
-  format. See [Phone Number Normalization](./types.md#phone-number-normalization).
+- `phoneNumber`: any accepted format (local `0XXXXXXXXX` treated as Uganda,
+  international `+256…` / `256…`, `+254…` / `254…`, and the other live-market
+  calling codes, with or without spaces). The SDK strips `+` and spaces; it
+  does not rewrite an international number to Uganda. See
+  [Phone Number Normalization](./types.md#phone-number-normalization).
 - `purpose?`: `"collection"` or `"payout"` (provider may route differently)
 
 Returns: `{ phoneNumber, customerName, verified }`

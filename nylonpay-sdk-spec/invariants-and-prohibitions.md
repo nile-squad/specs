@@ -42,6 +42,8 @@ Part of the [Nylon Pay SDK Spec](./spec.md).
 
 34. The `fingerprint` component of `signatureInput` is byte-identical to the `_fingerprint` value in the signed request body. The server reads the fingerprint from the body, never from a header, and feeds that value into its own `signatureInput`. Signing one value while sending another fails every request with an `auth` error.
 
+35. The SDK MUST NOT run a reachability check on every call. If the last successful round-trip is still fresh (5 minutes), it sends. If the last check is older than 5 minutes, it MUST check again and MUST NOT return `unreachable` from that stale memory. If there is no recent success, the next signed request is the check. If the last call failed as unreachable, it checks before the next SDK operation and MUST NOT send while that check still says down. While down, re-check at most every 15 seconds. A final operation error MUST call the configured global `onError` once. See [D22](./decision-records.md#d22-reachability-checks-only-when-there-is-no-recent-success).
+
 ## Prohibitions
 
 1. The SDK never stores API secrets on disk, in logs, or in error messages. Secrets exist only in memory for the lifetime of the SDK instance.

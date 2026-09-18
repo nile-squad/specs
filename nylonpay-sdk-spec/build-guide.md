@@ -105,8 +105,10 @@ for fast, friendly failure.
 
 - `normalizePhone()` per [Phone Number Normalization](./types.md#phone-number-normalization):
   strip whitespace, strip leading `+`, and if the result starts with `0` and is
-  10 digits, prepend `256`. This runs three layers deep (SDK, backend schema,
-  provider), build the client-side one now.
+  10 digits, prepend the dial code for `currency` (UGX `256`, KES `254`, TZS
+  `255`, RWF `250`, CDF `243`; unknown currency uses `256`). International
+  numbers already carrying a calling code pass through. This runs three layers
+  deep (SDK, backend schema, provider), build the client-side one now.
 - `validateCollect` / `validatePayout` / invoice checks per
   [Action Payloads](./transport.md#action-payloads) and each operation's input
   shape in [Operations](./operations.md): positive integer `amount` (reject
@@ -116,8 +118,8 @@ for fast, friendly failure.
 - Reference validation: whole-string UUID match. Do not rely on end-anchoring
   that differs across languages. Python's `$` accepts `"<uuid>\n"` where
   JavaScript does not (invariant 32, S-check). Any UUID version passes.
-- `testOutcome`: only `"success"` or `"fail"`, checked synchronously; the live
-  backend rejects it anyway.
+- `testOutcome`: `"success"`, `"fail"`, or a FailureCode, checked synchronously.
+  The live backend rejects it on live keys.
 - `getTransaction`: at least one of `id`/`reference` required.
 
 **Verify:** the [input edge cases](./implementation-requirements.md#edge-case-testing)

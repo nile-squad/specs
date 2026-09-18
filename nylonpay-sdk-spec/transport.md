@@ -72,7 +72,7 @@ accept exactly the same payload as their base actions.
 | `amount` | number | yes | minimum 500 UGX |
 | `currency` | string | no | defaults to `"UGX"` |
 | `customer.name` | string | yes | |
-| `customer.phoneNumber` | string | yes | validated and normalized to international format (`256XXXXXXXXX`) |
+| `customer.phoneNumber` | string | yes | validated and normalized to digits with the market's calling code |
 | `customer.email` | string | no | |
 | `description` | string | yes | |
 | `method` | string | no | `"mobileMoney"` or `"bank"`; defaults to `"mobileMoney"` |
@@ -80,7 +80,7 @@ accept exactly the same payload as their base actions.
 | `bank.bankName` | string | with `method: "bank"` | |
 | `reference` | string | no | a valid UUID (see [Reference constraints](./operations.md#reference-constraints)) |
 | `metadata` | object | no | string keys to string values; defaults to `{}` |
-| `testOutcome` | string | no | `"success"` or `"fail"`; sandbox keys only, live keys return a `validation` error; omitted means random |
+| `testOutcome` | string | no | `"success"`, `"fail"`, or a FailureCode; sandbox keys only, live keys return a `validation` error; omitted means random |
 
 **`sdk-make-payout`** (and `-and-resolve`):
 
@@ -89,7 +89,7 @@ accept exactly the same payload as their base actions.
 | `amount` | number | yes | minimum 5000 UGX |
 | `currency` | string | no | defaults to `"UGX"` |
 | `customer.name` | string | yes | |
-| `customer.phoneNumber` | string | yes | validated and normalized to international format (`256XXXXXXXXX`) |
+| `customer.phoneNumber` | string | yes | validated and normalized to digits with the market's calling code |
 | `customer.email` | string | no | |
 | `destination.accountHolderName` | string | yes | |
 | `destination.accountNumber` | string | yes | |
@@ -98,7 +98,7 @@ accept exactly the same payload as their base actions.
 | `description` | string | yes | |
 | `reference` | string | no | a valid UUID |
 | `metadata` | object | no | string keys to string values; defaults to `{}` |
-| `testOutcome` | string | no | `"success"` or `"fail"`; sandbox keys only, live keys return a `validation` error; omitted means random |
+| `testOutcome` | string | no | `"success"`, `"fail"`, or a FailureCode; sandbox keys only, live keys return a `validation` error; omitted means random |
 
 **`sdk-get-status`**:
 
@@ -117,7 +117,7 @@ accept exactly the same payload as their base actions.
 
 | Field | Type | Required | Validation |
 |-------|------|----------|------------|
-| `phoneNumber` | string | yes | validated and normalized to international format (`256XXXXXXXXX`) |
+| `phoneNumber` | string | yes | validated and normalized to digits with the market's calling code; local `0…` is Uganda, other markets use international form |
 | `purpose` | string | no | `"collection"` or `"payout"` |
 
 **`sdk-create-invoice`**:
@@ -128,7 +128,7 @@ accept exactly the same payload as their base actions.
 | `currency` | string | no | defaults to `"UGX"` |
 | `customerEmail` | string | yes | |
 | `customerName` | string | no | |
-| `customerPhone` | string | no | validated and normalized to international format (`256XXXXXXXXX`) |
+| `customerPhone` | string | no | validated and normalized to digits with the market's calling code |
 | `description` | string | no | |
 | `dueDate` | string | no | |
 | `items[]` | array | no | max 50 of `{ name: string, quantity: number > 0, unitPrice: number > 0 }` |
@@ -235,6 +235,14 @@ The SDK normalizes this to a result type: on success, returns the `data` payload
 
 The SDK splits the suffix off, exposing `category` and the clean `message` on the structured `SdkError` (see [Error Categories](./errors.md#error-categories)). The human portion (including any server log id) is preserved as the message. A message without the suffix is treated as category `internal`.
 
+Clients sending `x-nylon-features: error-code` may also receive:
+
+```
+<human-readable message> -- error-type: <category> -- error-code: <code>
+```
+
+`parseError` MUST read the optional code onto `SdkError.code`. Clients omitting `error-code` MUST NOT be sent that suffix: their parsers anchor at `error-type` and would lose the category.
+
 ## Request Signing, Response Verification, Response Size Bounds
 
 The signing protocol (canonical payload, request headers, `_fingerprint`,
@@ -255,7 +263,7 @@ Every request is signed with HMAC-SHA256 over the inner `payload` object
 - Business failures are HTTP `400` and therefore never retried, they are returned (or thrown, for async initiation) immediately with their category
 - Exponential backoff: `2^attempt * 1000 + random(0-500)` ms
 - Max retries: configurable (default 3)
-- Per-request timeout: configurable (default 30s), enforced via AbortController equivalent
+- Per-request timeout: configurable (default 90s), enforced via AbortController equivalent
 - On retry, the request **body is unchanged** (same payload, same `reference`), but each attempt is **signed fresh:** a new `nonce`, `timestamp`, and `signature` per try. Idempotency is carried by the constant `reference` (see [D18](./decision-records.md#d18-the-reference-is-the-only-transaction-identity-no-separate-idempotency-key-no-heuristic-duplicate-detection)), not by reusing the nonce. Re-signing keeps a post-backoff retry inside the server's timestamp-freshness window and prevents a retry from being rejected as a nonce replay (see [D19](./decision-records.md#d19-retries-are-signed-fresh-per-attempt-the-reference-not-the-nonce-carries-idempotency))
 
 ## Status Polling
@@ -269,4 +277,18 @@ A PaymentInstance tracks status transitions by repeatedly calling the one-shot s
 - **Delayed flag.** Status responses may include `delayed: true` when a payment has been non-terminal for more than ~3 minutes. When `onDelayed` is `"return"`, the instance resolves with the still-pending transaction; when `"wait"` (default), polling continues.
 - **Backoff.** For the first two minutes, each interval is the configured poll interval plus jitter. After that, the interval doubles every two minutes up to a 15s cap.
 - **Late-update guard.** Once an instance has resolved (terminal, error, or timeout) it emits no further events; an in-flight poll that resolves after that point is ignored.
+
+## Reachability
+
+Before a signed request the transport follows the check policy in
+[Configuration](./configuration.md#offline-and-nylon-down).
+
+A recent success still within 5 minutes skips the check. A check older than 5
+minutes is stale: the transport MUST check again. It MUST NOT return
+`unreachable` from that memory. No recent success means this signed request is
+the check. After an unreachable failure, the transport checks before the next
+SDK operation. It MUST NOT send while that check still says down. While down,
+re-check at most every 15 seconds. Detection (DNS vs Nylon down vs HTTP
+502/503/504) is specified there. Retry policy above still applies to the
+discovering request. Memory is updated only after retries are exhausted.
 

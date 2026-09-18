@@ -28,6 +28,7 @@ type EventData = {
   transaction?: Transaction;    // full transaction on terminal status events
   error?: string;               // error message on the "error" event
   category?: SdkErrorCategory;  // machine-readable error category on "error" event
+  code?: string;                // optional Nylon error code on "error" event
   retryable?: boolean;          // whether re-invoking may succeed, on "error" event
   timestamp: string;           // ISO 8601 timestamp of when the event was emitted
 };
@@ -48,4 +49,8 @@ raw status: a `pending → processing` status change does not re-fire `processin
 - Poll interval: base interval (default 2s) plus jitter for the first two minutes; doubles every two minutes thereafter, capped at 15s
 - Reference mismatch between initiation and a status update emits `error` and stops
 - Network errors during polling emit `error` and stop (after retries exhausted)
+
+An unreachable failure is reported through the global `onError` handler as
+`category: "network"` and `code: "unreachable"`. PaymentInstance initiation
+also emits its normal `"error"` event.
 

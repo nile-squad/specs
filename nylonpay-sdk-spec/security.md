@@ -119,6 +119,7 @@ Vector V4 below catches every one of these escaping defaults.
 - `x-nylon-nonce`: 32-character hex nonce (unique per request, from cryptographic random bytes)
 - `x-nylon-timestamp`: millisecond timestamp as a decimal string
 - `x-nylon-signature`: computed HMAC signature, **lowercase hex** (the one canonical form; see invariant 28)
+- `x-nylon-features`: comma-separated list of wire additions this client can parse. Not part of the signature. Current value: `error-code`. The backend MUST withhold unlisted additions. A client unable to ask for an addition MUST never be sent one.
 
 ## Request body additions
 
@@ -218,6 +219,7 @@ POST {baseUrl}
     x-nylon-nonce:     nonce
     x-nylon-timestamp: timestamp
     x-nylon-signature: signature       # lowercase hex
+    x-nylon-features:  "error-code"    # unsigned; capability list, not a flag
   body (envelope):
     { "intent": "execute",
       "service": "sdk",
