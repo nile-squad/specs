@@ -41,7 +41,7 @@ A missing or malformed API key/secret throws at initialization. Client-side
 validation errors also throw (programmer mistakes). When an async initiation
 (`collectPayment`/`makePayout`) is rejected on the **server** (invalid key, bad
 signature, scope/limit/provider reject), the operation returns a PaymentInstance
-that emits an `error` event carrying a structured `category`. The transaction
+that emits an `error` event carrying a structured `reason`. The transaction
 never started, so there is nothing to poll. Sync and blocking operations return
 error results. The boundary: programmer mistakes throw; operational failures
 surface as results or events. See
@@ -49,8 +49,8 @@ surface as results or events. See
 
 ## Idempotency rides on the reference
 
-The `reference` is the transaction identity and the idempotency key. There is no
-separate `idempotencyKey` input (D18). Same reference = same transaction: the SDK
+The `reference` is the transaction identity and the idempotency key (D18).
+Same reference = same transaction: the SDK
 replays the existing transaction (`duplicate: true`) instead of charging again.
 A fresh reference always starts a fresh payment. When omitted, the SDK generates
 the reference (a UUID) automatically. On a retry, the reference MUST be reused

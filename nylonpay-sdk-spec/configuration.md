@@ -13,8 +13,7 @@ See `NylonPayConfig` type above.
 
 Mode is determined by the API key, not by SDK config. A
 sandbox key (issued in test mode) routes transactions through test providers and
-does not move real money; a live key processes real transactions. The SDK has no
-`environment` option.
+does not move real money; a live key processes real transactions.
 
 ## Defaults
 
@@ -47,16 +46,15 @@ webhooks (`onDelayed: "return"`).
 ## Offline and Nylon down
 
 Pass `onError` when creating the SDK instance to handle structured errors from
-all operations on that instance. The handler does not create another event
-family. Payment operations still emit their normal PaymentInstance `"error"`
-event, and Result operations still return an error.
+all operations on that instance. Payment operations still emit their normal
+PaymentInstance `"error"` event, and Result operations still return an error.
 
 ```typescript
 const nylonpay = createNylonPay({
   apiKey,
   apiSecret,
   onError: (error) => {
-    if (error.code === "unreachable") {
+    if (error.reason === "SERVICES_DOWN") {
       pauseCalls(error.message);
       return;
     }
@@ -65,18 +63,13 @@ const nylonpay = createNylonPay({
 });
 ```
 
-The `unreachable` code means the request could not complete. Its message is
-exactly one of:
+`NETWORK` means this machine is offline. `SERVICES_DOWN` means Nylon Pay did
+not complete the request. The `message` is one of:
 
-| `reason` | Meaning |
-|----------|---------|
-| `host has no internet connection` | DNS or no-route failure. This machine cannot reach the network. |
-| `Nylon Pay services seem to be down` | The host has a network, but Nylon Pay did not complete the request. |
-
-Implementations MUST export these two strings as named constants
-(`UNREACHABLE_HOST_OFFLINE`, `UNREACHABLE_NYLON_DOWN`) so merchants compare
-constants rather than copied prose. Implementations MUST also export
-`UNREACHABLE_CODE` (`"unreachable"`).
+| `reason` | `message` |
+|----------|-----------|
+| `NETWORK` | `host has no internet connection` |
+| `SERVICES_DOWN` | `Nylon Pay services seem to be down` |
 
 ### When the SDK checks
 
@@ -86,9 +79,9 @@ It MUST NOT run a reachability check on every call.
 | Situation | Required behavior |
 |-----------|-------------------|
 | Last success is still fresh (fewer than 5 minutes) | Skip the check. Send the signed operation. |
-| Last check (success or failure) is older than 5 minutes | Check again. MUST NOT return `unreachable` from memory that old. Hours-old memory is not proof Nylon is still down. |
+| Last check (success or failure) is older than 5 minutes | Check again. MUST NOT return `NETWORK` or `SERVICES_DOWN` from memory that old. Hours-old memory is not proof Nylon is still down. |
 | No recent success in memory | The next signed request is the check. Do not add an extra request on a cold start. |
-| Last call failed as unreachable | Check before the next SDK operation. MUST NOT send while that check still says down. |
+| Last call failed as `NETWORK` or `SERVICES_DOWN` | Check before the next SDK operation. MUST NOT send while that check still says down. |
 | Still down, last check within 15 seconds | Return `network` / `code: "unreachable"` without hitting the network. Call `onError` for the returned error. |
 
 While unreachable, status polls MUST NOT re-check on every tick. Re-check at

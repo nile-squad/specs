@@ -143,8 +143,8 @@ Every SDK must ship an integration test suite that runs against a real sandbox b
 | I13 | Unknown reference | `getTransaction` | Returns error for a reference that doesn't exist |
 | I14 | Sub-minimum collection amount | `collectPayment` | Server rejects amounts below 500 UGX with a validation error |
 | I14b | Sub-minimum payout amount | `makePayout` | Server rejects amounts below 5000 UGX with a validation error |
-| I15 | Revoked key (live-only) | `collectPayment` | Server rejects a revoked API key, `collectPayment` throws an error with category `auth` (HTTP 400, not 401). Skipped unless `NYLONPAY_TEST_MODE=live` |
-| I16 | Unknown key → auth category | `getStatus` / `collectPayment` | A well-formed but unknown key yields category `auth`, `getStatus` returns an error result, `collectPayment` throws. Sandbox-testable (unlike I15) |
+| I15 | Revoked key (live-only) | `collectPayment` | Server rejects a revoked API key, `collectPayment` throws an error with reason `AUTH` (HTTP 400, not 401). Skipped unless `NYLONPAY_TEST_MODE=live` |
+| I16 | Unknown key → AUTH reason | `getStatus` / `collectPayment` | A well-formed but unknown key yields reason `AUTH`, `getStatus` returns an error result, `collectPayment` throws. Sandbox-testable (unlike I15) |
 | I17 | Resolve returns full Transaction | `collectPaymentAndResolve` | Returns `id`, numeric `amount`, `metadata`, and (on failure) `failureReason`, never a partial stub |
 | I18 | Metadata round-trip | `collectPayment` + `getTransaction` | Merchant-supplied `metadata` is returned unchanged |
 | I19 | Polling reaches terminal | `collectPayment` + `wait()` | A polling instance resolves to a terminal state and never hangs |

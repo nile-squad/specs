@@ -69,8 +69,8 @@ type WebhookEventType =
 type Currency = "USD" | "EUR" | "GBP" | "KES" | "UGX" | "TZS" | "RWF" | "CDF";
 ```
 
-`UnreachableReason` is used as the message for `SdkError.code` equal to
-`"unreachable"`. See [Offline and Nylon down](./configuration.md#offline-and-nylon-down).
+`UnreachableReason` is the `message` when `reason` is `NETWORK` or
+`SERVICES_DOWN`. See [Offline and Nylon down](./configuration.md#offline-and-nylon-down).
 
 ### The `Result` shape
 
@@ -449,9 +449,9 @@ type WebhookTransactionSnapshot = {
 ```
 
 Every key is always present, the backend sends an explicit null rather than
-omitting one, so the shape a merchant types against never changes. There is no
-`statusText` here: it belongs to the `Transaction` shape, and the statuses it
-describes (`on_hold`, `under_review`) emit no webhook at all.
+omitting one, so the shape a merchant types against never changes.
+`statusText` belongs to the `Transaction` shape, and the statuses it describes
+(`on_hold`, `under_review`) emit no webhook at all.
 
 ## Transaction Shape
 

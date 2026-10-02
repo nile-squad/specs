@@ -204,8 +204,8 @@ Error response (HTTP `400`):
 }
 ```
 
-The SDK splits the ` -- error-type: ` suffix into the structured error's `category`
-(here `validation`) and keeps the human-readable part as the message.
+The SDK splits the ` -- error-type: ` suffix into the structured error's `reason`
+(here `VALIDATION`) and keeps the human-readable part as the message.
 
 ## Response Format
 
@@ -225,15 +225,15 @@ Every server response has this shape:
 
 The SDK normalizes this to a result type: on success, returns the `data` payload. On failure, returns an error derived from `message`.
 
-**HTTP is binary.** The backend returns HTTP `200` for success (`status: true`) and HTTP `400` for every failure (`status: false`), regardless of cause. The SDK MUST NOT branch on HTTP status codes to classify errors. Provider/transport-level failures the backend never produced (network errors, request timeouts, gateway 5xx) are surfaced by the SDK's transport with the `network`/`timeout`/`internal` categories.
+**HTTP is binary.** The backend returns HTTP `200` for success (`status: true`) and HTTP `400` for every failure (`status: false`), regardless of cause. The SDK MUST NOT branch on HTTP status codes to classify errors. Provider/transport-level failures the backend never produced (network errors, request timeouts, gateway 5xx) are surfaced by the SDK's transport as `NETWORK`, `SERVICES_DOWN`, `TIMEOUT`, or `INTERNAL`.
 
-**Error categories.** Every server failure carries a machine-readable category so merchants branch on a stable value instead of parsing prose. Because the framework discards the response `data` on failures and only the `message` survives, the category travels as a suffix on the message:
+**Error reasons.** Every server failure carries a machine-readable reason so merchants branch on a stable value instead of parsing prose. Because the framework discards the response `data` on failures and only the `message` survives, the lowercase category travels as a suffix on the message:
 
 ```
 <human-readable message> -- error-type: <category>
 ```
 
-The SDK splits the suffix off, exposing `category` and the clean `message` on the structured `SdkError` (see [Error Categories](./errors.md#error-categories)). The human portion (including any server log id) is preserved as the message. A message without the suffix is treated as category `internal`.
+The SDK splits the suffix off, uppercases it to `reason`, and keeps the clean `message` on the structured `SdkError` (see [Error Reasons](./errors.md)). The human portion (including any server log id) is preserved as the message. A message without the suffix is treated as `INTERNAL`.
 
 Clients sending `x-nylon-features: error-code` may also receive:
 
@@ -241,7 +241,7 @@ Clients sending `x-nylon-features: error-code` may also receive:
 <human-readable message> -- error-type: <category> -- error-code: <code>
 ```
 
-`parseError` MUST read the optional code onto `SdkError.code`. Clients omitting `error-code` MUST NOT be sent that suffix: their parsers anchor at `error-type` and would lose the category.
+`parseError` MAY read an outcome-named code into `reason`. An unrecognized code falls back to the category-derived reason. Clients omitting `error-code` MUST NOT be sent that suffix: their parsers anchor at `error-type` and would lose the category.
 
 ## Request Signing, Response Verification, Response Size Bounds
 

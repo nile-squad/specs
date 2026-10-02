@@ -103,7 +103,7 @@ Part of the [Nylon Pay SDK Spec](./spec.md).
 ## D13: Server-side initiation failures emit error event
 
 - **Decision:** `collectPayment` and `makePayout` return a `PaymentInstance` that emits an `"error"` event when the transaction fails to start on the server. That includes an invalid key, a bad signature, scope/limit rejection, provider rejection, network error, and timeout. The transaction never started, so there is nothing to poll. Only client-side validation errors (zero amount, empty required fields, invalid items, missing bank details) throw synchronously.
-- **Context:** A PaymentInstance models a transaction that exists and is being polled. When initiation fails on the server, there is no transaction to poll. The error event carries `category` and `retryable` so the merchant can branch programmatically.
+- **Context:** A PaymentInstance models a transaction that exists and is being polled. When initiation fails on the server, there is no transaction to poll. The error event carries `reason` and `retryable` so the merchant can branch programmatically.
 - **Alternatives considered:** (a) Throw on all initiation failures. Rejected: buries server-side failures in exceptions, forces merchants to wrap every call in `try/catch`, and makes errors easy to miss if the handler isn't attached yet. (b) Return a `Result` from the async ops. Rejected: breaks the PaymentInstance contract for the common success path.
 - **Rationale:** Server-side initiation failure is an operational error that surfaces through the event channel with structured metadata (`category`, `retryable`). Client-side validation errors (programmer mistakes) throw immediately. This separates concerns: `try/catch` for bugs, event handlers for operational failures.
 - **Tradeoffs:** The merchant must attach an `"error"` handler to catch server-side initiation failures. This is the correct trade: an unhandled event is visible in logs; an unhandled exception crashes the process.
@@ -142,7 +142,7 @@ Part of the [Nylon Pay SDK Spec](./spec.md).
 
 ## D18: The reference is the only transaction identity (no separate idempotency key, no heuristic duplicate detection)
 
-- **Decision:** A merchant-supplied `reference` is the transaction identity AND the idempotency key. Same reference = same transaction: a create operation that reuses a reference replays the existing transaction (response carries `duplicate: true`) instead of charging again. A reference that is taken and cannot be replayed (it belongs to another account) fails with the `duplicate` error category. A fresh reference always starts a fresh payment. Amount, customer phone, email, and timing never block an operation on their own. There is no separate `idempotencyKey` input anywhere in the SDK surface.
+- **Decision:** A merchant-supplied `reference` is the transaction identity AND the idempotency key. Same reference = same transaction: a create operation that reuses a reference replays the existing transaction (response carries `duplicate: true`) instead of charging again. A reference that is taken and cannot be replayed (it belongs to another account) fails with the `duplicate` error category. A fresh reference always starts a fresh payment. Amount, customer phone, email, and timing never block an operation on their own. The `reference` is the only idempotency input on the SDK surface.
 - **Context:** The merchant already identifies the transaction with the `reference`. The backend enforces its uniqueness at the database and replays it deterministically, so identity and idempotency are the same thing and stay restart-proof.
 - **Alternatives considered:** (a) Heuristic duplicate detection layered on top of the reference. That meant an in-memory cache keyed on `org:phone:amount:currency` as a 30-minute hard block, a one-pending-transaction-per-customer guard, and a 24-hour post-success cooldown per customer. Rejected: it second-guesses the merchant's own identity scheme and rejects legitimate payments, such as a customer paying the same amount twice or a retry after a stuck pending. The errors surfaced as a generic "Payment collection failed", so developers could not tell what was wrong or how to proceed. (b) Separate idempotency key + free-form reference. Rejected: two overlapping identities invite drift; the reference is already unique and provider-visible (`merchantTransactionId`). (c) Error (rather than replay) on same-account reference reuse. Rejected: replay is what makes network-failure retries safe.
 - **Rationale:** Exact, explainable, restart-proof. Reference uniqueness is enforced by the database, replays are deterministic, and the failure mode ("this reference is taken, use a new one") is actionable. The `duplicate` category plus the `duplicate: true` replay flag give developers the signal the heuristics never did.
@@ -178,8 +178,32 @@ Part of the [Nylon Pay SDK Spec](./spec.md).
 
 ## D22: Reachability checks only when there is no recent success
 
-- **Decision:** The SDK remembers the last successful round-trip. If that call went through and 5 minutes have not passed, it does not run a reachability check. If the last check is older than 5 minutes, it checks again. It does not return `unreachable` from hours-old memory. If there is no recent success, the next signed request is the check. If the last call failed as unreachable, it checks before the next SDK operation. While down, it re-checks at most every 15 seconds so status polls do not hammer the server. The check is an unsigned POST of `{}` to the same `baseUrl`, not a non-`sdk` service. Final errors go to the global `onError` handler; no separate SDK reachability event exists.
+- **Decision:** The SDK remembers the last successful round-trip. If that call went through and 5 minutes have not passed, it does not run a reachability check. If the last check is older than 5 minutes, it checks again. It does not return `NETWORK` or `SERVICES_DOWN` from hours-old memory. If there is no recent success, the next signed request is the check. If the last call failed as `NETWORK` or `SERVICES_DOWN`, it checks before the next SDK operation. While down, it re-checks at most every 15 seconds so status polls do not hammer the server. The check is an unsigned POST of `{}` to the same `baseUrl`, not a non-`sdk` service. Final errors go to the global `onError` handler.
 - **Context:** Checking before every call doubles traffic on the happy path. Merchants still need a way to stop firing payments into an outage.
 - **Alternatives considered:** (a) Probe before every call. Rejected: hammers the server. (b) 5-second skip after any failure, no success window. Rejected: still treats every call as a check. (c) Success window of 5 minutes; empty memory uses the next signed request as the check; last failure checks before the next operation (chosen).
 - **Rationale:** A recent success is proof Nylon answered. A check older than 5 minutes is not. Polls every 2 seconds must not each open a reachability request. After a failure, the next merchant operation is checked before it is attempted.
 - **Tradeoffs:** Nylon going down inside the 5-minute success window is discovered by the next signed call, not by a probe. One failed payment is the signal. Recovery waits up to 15 seconds so polls do not hammer.
+
+## D23: One ALL-CAPS `reason` field
+
+- **Decision:** Merchants branch on `SdkError.reason`, an ALL-CAPS value
+  (`AUTH`, `VALIDATION`, `LIMIT`, `RATE_LIMIT`, `ACCOUNT`, `PROVIDER`,
+  `DUPLICATE`, `NOT_FOUND`, `INTERNAL`, `NETWORK`, `SERVICES_DOWN`,
+  `TIMEOUT`). `NETWORK` means this machine is offline. `SERVICES_DOWN`
+  means Nylon Pay did not complete the request. The wire keeps the
+  lowercase `-- error-type:` suffix. `category` and string `code` stay as
+  deprecated aliases this release line.
+- **Context:** Calling the machine field `code` implied a number. A
+  separate `category` plus optional string `code` forced merchants to
+  import constants. `payout_gate` named internal machinery and never
+  appeared on the wire.
+- **Alternatives considered:** (a) Keep `category` plus string `code`.
+  Rejected: `code` is the wrong word, and two fields for one decision.
+  (b) Numeric codes. Rejected: merchants compare names, not numbers.
+  (c) One ALL-CAPS `reason` (chosen).
+- **Rationale:** One field, one comparison, outcome names only. Future
+  wire codes may become reasons only when they name a merchant outcome
+  (`ON_HOLD`). Unrecognized codes fall back to the category-derived
+  reason.
+- **Tradeoffs:** Published registry clients still parse lowercase
+  `-- error-type:`. New SDKs normalize at the parse boundary.

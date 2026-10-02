@@ -86,8 +86,8 @@ Note the two rules that trip people up:
   the input shapes, the `Transaction` shape, and the webhook shapes.
   `WebhookTransactionSnapshot` intentionally omits `statusText` and uses
   `null` (never omission) for missing values. Type it exactly that way.
-- A `Result<T, E>`, `SdkError`, and `SdkErrorCategory` are defined in
-  [Error Categories](./errors.md). The hook signatures in Types reference
+- A `Result<T, E>`, `SdkError`, and `SdkErrorReason` are defined in
+  [Error Reasons](./errors.md). The hook signatures in Types reference
   `Result<T, E>`; use [that shape](./types.md#the-result-shape).
 
 **Verify:** the file compiles and every type is exported. Untyped languages:
@@ -196,11 +196,11 @@ request timeout.
 **Build** the public functions, one per row. Each maps to an action in the
 [transport action table](./transport.md#request-format) and calls `postAction`.
 The synchronous ones return a `Result` (the `SdkError` shape from
-[Error Categories](./errors.md)); the async initiates
+[Error Reasons](./errors.md)); the async initiates
 (`collectPayment`, `makePayout`) return a PaymentInstance or, on server-side
 initiation failure, an instance that emits `error` (invariant 17, D13, and the
 [`error` event](./payment-instance.md#events)). That event carries
-`category`/`retryable`. Client-side validation errors (from Step 3) still
+`reason`/`retryable`. Client-side validation errors (from Step 3) still
 throw. For **retries on network failure, reuse the same `reference`** so the
 server replays instead of double-charging (D18).
 

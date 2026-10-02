@@ -1,6 +1,6 @@
 # Nylon Pay SDK Spec
 
-**Version:** 2.4.0. See the [Changelog](./changelog.md) for version history.
+**Version:** 2.5.0. See the [Changelog](./changelog.md) for version history.
 
 > Canonical, language-agnostic specification for the Nylon Pay SDK. Implement it
 > in any language; the [TypeScript SDK](https://github.com/nile-squad/nylonpay-ts)
@@ -35,7 +35,7 @@ document is self-contained for its topic and links back here.
 | [Types and Events](./types.md) | Type definitions, the Transaction shape, and the webhook event catalog |
 | [Transport Contract](./transport.md) | Endpoint, request envelope, per-action payload validation, a worked request/response example, retry policy, and status polling |
 | [Security](./security.md) | Signing protocol (canonical payload, request headers, `_fingerprint`, conformance vectors, server-side checks), response verification and size bounds, webhook integrity, secret handling |
-| [Error Categories](./errors.md) | The fixed error taxonomy and how categories travel on the wire |
+| [Error Reasons](./errors.md) | The fixed error taxonomy and how reasons are derived from the wire |
 | [Configuration](./configuration.md) | Factory configuration: keys, base URL, timeouts, hooks |
 | [Implementation Requirements](./implementation-requirements.md) | Unit, integration (I1–I19), and security (S1–S21) test suites; spec compliance rules |
 | [Invariants and Prohibitions](./invariants-and-prohibitions.md) | The numbered guarantees every implementation upholds and the things no SDK ever does |

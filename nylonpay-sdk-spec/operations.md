@@ -67,7 +67,6 @@ intact.
 ## Reference uniqueness and replay
 
 The reference is the transaction identity and the only idempotency mechanism.
-There is no separate idempotency key.
 
 - **One reference, one transaction.** Calling a create operation again with the
   same reference does NOT charge again: the server replays the existing
@@ -75,7 +74,7 @@ There is no separate idempotency key.
 - **A new transaction needs a new reference.** Same customer, same amount, same
   timing, none of it matters; a fresh reference always starts a fresh payment.
 - A reference that is taken and cannot be replayed (it belongs to another
-  account) fails with the `duplicate` error category. See
+  account) fails with the `DUPLICATE` reason. See
   [Error Categories](./errors.md). Retry with a new reference.
 - Retrying a network failure (5xx/timeout) MUST reuse the same reference so the
   retry replays instead of double-charging.

@@ -11,7 +11,19 @@ here, not in the spec body.
 
 ## Current version
 
-**2.4.0**
+**2.5.0**
+
+
+## 2.5.0
+
+- `SdkError` uses one ALL-CAPS `reason` field. Merchants branch on
+  `error.reason` (`AUTH`, `VALIDATION`, `LIMIT`, `RATE_LIMIT`, `ACCOUNT`,
+  `PROVIDER`, `DUPLICATE`, `NOT_FOUND`, `INTERNAL`, `NETWORK`,
+  `SERVICES_DOWN`, `TIMEOUT`). `NETWORK` means this machine is offline.
+  `SERVICES_DOWN` means Nylon Pay did not complete the request.
+- `category` and string `code` remain deprecated aliases this release line.
+- Wire format is unchanged: lowercase `-- error-type:` plus optional
+  `-- error-code:` for clients that listed `error-code`.
 
 
 ## 2.4.0
