@@ -185,12 +185,13 @@ Normalization rules:
 | Strip all whitespace | `+254 710 000 000` → `+254710000000` |
 | Strip leading `+` | `+254710000000` → `254710000000` |
 | If starts with `0` and length is 10, prepend the **currency's** dial code | UGX `0768499027` → `256768499027`; KES `0710000000` → `254710000000` |
+| If it is 9 digits (a local number typed without its `0`), prepend the **currency's** dial code | TZS `712345678` → `255712345678` |
 | International numbers already carrying a calling code pass through | `254710000000` → `254710000000` |
 
 Dial codes: UGX `256`, KES `254`, TZS `255`, RWF `250`, CDF `243`. Unknown
-currency uses `256`. `verifyPhone` has no currency: a local `0…` number is
-treated as Uganda; other markets must be passed in international form
-(`+254…`, `254…`).
+currency uses `256`. `verifyPhone` has no currency: a local `0…` or 9-digit
+number is treated as Uganda; other markets must be passed in international
+form (`+254…`, `254…`).
 
 The normalized result is what gets stored in the `Transaction.phone` field and sent
 to payment providers.
@@ -200,6 +201,7 @@ to payment providers.
 | Format | Pattern | Example |
 |--------|---------|---------|
 | Local (10-digit) | `0XXXXXXXXX` | `0768499027` (UGX), `0710000000` (KES) |
+| Local without the `0` (9-digit) | `XXXXXXXXX` | `768499027` (UGX), `712345678` (TZS) |
 | International with `+` | `+<dial>XXXXXXXXX` | `+256768499027`, `+254710000000` |
 | International without `+` | `<dial>XXXXXXXXX` | `256768499027`, `254710000000` |
 | With spaces (any format) | n/a | `+256 768 499 027`, `+254 710 000 000` |

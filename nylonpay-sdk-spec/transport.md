@@ -8,7 +8,9 @@ The Nylon Pay backend uses Nile.js action-based routing. All SDK requests target
 
 All requests are `POST` to `{baseUrl}`.
 
-The default `baseUrl` is `https://api.nylonpay.nilesquad.com/api/services`, a single URL that includes both the origin and the path. The SDK appends no further path segments; the body identifies the service and action. Every SDK MUST default to this URL and MUST allow the merchant to override it in configuration. Some merchants run against a custom base URL for special integrations, but the default is what ships.
+The default `baseUrl` is `https://api.nylonpay.com/api/services`, a single URL that includes both the origin and the path. The SDK appends no further path segments; the body identifies the service and action. Every SDK MUST default to this URL and MUST allow the merchant to override it in configuration. Some merchants run against a custom base URL for special integrations, but the default is what ships.
+
+The original address, `https://api.nylonpay.nilesquad.com/api/services`, serves the same API. Every SDK MUST export it as `LEGACY_BASE_URL` (PHP: `Config::LEGACY_BASE_URL`) next to `DEFAULT_BASE_URL`, so a merchant can stay on it by passing it as `baseUrl`. An SDK MUST NOT switch addresses on its own after a failed request (see [D24](./decision-records.md#d24-two-api-addresses-no-automatic-switching)).
 
 There are no RESTful routes, no query parameters, no HTTP method variety. Every operation, regardless of type, hits the same endpoint with a different JSON body.
 
@@ -148,7 +150,7 @@ SDK's transport layer.
 Request:
 
 ```
-POST https://api.nylonpay.nilesquad.com/api/services
+POST https://api.nylonpay.com/api/services
 content-type: application/json
 x-nylon-key: npk_live_...
 x-nylon-nonce: 3f9c1a7e5b2d48c6a0e8f4b1d7c92e50

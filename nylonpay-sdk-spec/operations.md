@@ -198,6 +198,8 @@ Returns: `{ phoneNumber, customerName, verified }`
 
 Generates a hosted invoice and emails it to the customer. The returned payment link directs the customer to a mobile-money checkout page.
 
+Invoices need Level 2 verification, in every currency. Below Level 2 the backend refuses with error type `account` (`reason: ACCOUNT`); a retry cannot succeed.
+
 Input shape:
 - `amount`: positive integer in smallest currency unit
 - `currency`: ISO 4217

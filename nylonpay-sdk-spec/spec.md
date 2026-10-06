@@ -1,6 +1,6 @@
 # Nylon Pay SDK Spec
 
-**Version:** 2.5.0. See the [Changelog](./changelog.md) for version history.
+**Version:** 2.6.0. See the [Changelog](./changelog.md) for version history.
 
 > Canonical, language-agnostic specification for the Nylon Pay SDK. Implement it
 > in any language; the [TypeScript SDK](https://github.com/nile-squad/nylonpay-ts)

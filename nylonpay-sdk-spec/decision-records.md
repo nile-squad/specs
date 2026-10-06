@@ -207,3 +207,22 @@ Part of the [Nylon Pay SDK Spec](./spec.md).
   reason.
 - **Tradeoffs:** Published registry clients still parse lowercase
   `-- error-type:`. New SDKs normalize at the parse boundary.
+
+
+## D24: Two API addresses, no automatic switching
+
+- **Decision:** SDKs default to `https://api.nylonpay.com/api/services` and
+  export the original `https://api.nylonpay.nilesquad.com/api/services` as
+  `LEGACY_BASE_URL`. Both serve the same API. A merchant picks one with
+  `baseUrl`; the SDK never moves to the other address by itself.
+- **Context:** Nylon Pay is moving to the nylonpay.com domain. Published
+  SDK releases default to the original address and must keep working.
+- **Alternatives considered:** (a) Retry on the other address when a
+  request fails. Rejected: a payout that reached the server but whose reply
+  was lost would be sent again on the second address, paying twice.
+  (b) Keep the original default. Rejected: new integrations should start on
+  the new domain. (c) New default, original exported, no switching (chosen).
+- **Rationale:** One address per instance keeps signed requests, nonces and
+  idempotency on one server path, so a retry is always the same request.
+- **Tradeoffs:** If the new domain is unreachable from a merchant's network,
+  they set `baseUrl` to `LEGACY_BASE_URL` themselves.

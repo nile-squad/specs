@@ -19,7 +19,7 @@ does not move real money; a live key processes real transactions.
 
 | Field | Default |
 |-------|---------|
-| `baseUrl` | `https://api.nylonpay.nilesquad.com/api/services` |
+| `baseUrl` | `https://api.nylonpay.com/api/services` (`LEGACY_BASE_URL`: `https://api.nylonpay.nilesquad.com/api/services`) |
 | `timeoutMs` | `90000` |
 | `maxRetries` | `3` |
 | `maxPollIntervalMs` | `2000` |

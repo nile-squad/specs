@@ -105,8 +105,9 @@ for fast, friendly failure.
 
 - `normalizePhone()` per [Phone Number Normalization](./types.md#phone-number-normalization):
   strip whitespace, strip leading `+`, and if the result starts with `0` and is
-  10 digits, prepend the dial code for `currency` (UGX `256`, KES `254`, TZS
-  `255`, RWF `250`, CDF `243`; unknown currency uses `256`). International
+  10 digits, or is 9 digits with no `0`, prepend the dial code for `currency`
+  (UGX `256`, KES `254`, TZS `255`, RWF `250`, CDF `243`; unknown currency
+  uses `256`). International
   numbers already carrying a calling code pass through. This runs three layers
   deep (SDK, backend schema, provider), build the client-side one now.
 - `validateCollect` / `validatePayout` / invoice checks per

@@ -11,7 +11,18 @@ here, not in the spec body.
 
 ## Current version
 
-**2.5.0**
+**2.6.0**
+
+
+## 2.6.0
+
+- The default `baseUrl` is `https://api.nylonpay.com/api/services`. SDKs
+  export the original `https://api.nylonpay.nilesquad.com/api/services` as
+  `LEGACY_BASE_URL` and never switch addresses on their own (D24).
+- `normalizePhone` gives a 9-digit local number, typed without its `0`, the
+  dial code for the payment currency.
+- `createInvoice` needs Level 2 verification in every currency; below it the
+  backend returns error type `account`.
 
 
 ## 2.5.0
