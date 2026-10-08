@@ -358,8 +358,8 @@ type Transaction = {
   failureCode?: FailureCode | null;
   /**
    * Humanized status description. For `on_hold` statuses, this provides
-   * a plain-language explanation (e.g., "Payout is being reviewed and will
-   * complete shortly"). For failed transactions, this is typically the same
+   * a plain-language explanation (e.g., "This payout is being reviewed and
+   * will complete shortly."). For failed transactions, this is typically the same
    * as `failureReason`. Populated by the backend when available.
    */
   statusText?: string;
@@ -383,8 +383,8 @@ type StatusResponse = {
   failureCode?: FailureCode | null;
   /**
    * Humanized status description. For `on_hold` statuses, this provides
-   * a plain-language explanation (e.g., "Payout is being reviewed and will
-   * complete shortly"). Populated by the backend when available.
+   * a plain-language explanation (e.g., "This payout is being reviewed and
+   * will complete shortly."). Populated by the backend when available.
    */
   statusText?: string;
   updatedAt: string;
