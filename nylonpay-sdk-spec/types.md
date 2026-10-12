@@ -241,6 +241,7 @@ type CollectPaymentInput = {
   tags?: string[];
   metadata?: Record<string, string>;
   testOutcome?: "success" | "fail" | FailureCode;
+  prompt?: "pin";
 };
 
 type MakePayoutInput = {
@@ -253,6 +254,7 @@ type MakePayoutInput = {
   tags?: string[];
   metadata?: Record<string, string>;
   testOutcome?: "success" | "fail" | FailureCode;
+  prompt?: "pin";
 };
 
 type GetStatusInput = {

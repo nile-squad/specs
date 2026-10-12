@@ -11,7 +11,19 @@ here, not in the spec body.
 
 ## Current version
 
-**2.6.0**
+**2.7.0**
+
+
+## 2.7.0
+
+- `collectPayment`, `collectPaymentAndResolve`, `makePayout`, and
+  `makePayoutAndResolve` accept `prompt: "pin"` on sandbox keys only. The
+  payment stays pending until the developer types the merchant's customer PIN
+  on the dashboard Sandbox page. The PIN is one per merchant, shared by every
+  sandbox key of that merchant. Three wrong PINs fail the payment, and no PIN
+  within about 2 minutes fails it. When `testOutcome` is also set, `prompt` is
+  ignored.
+- SDK releases with this change: TS 2.2.0, Python 0.7.0, PHP 0.3.0.
 
 
 ## 2.6.0

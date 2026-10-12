@@ -121,6 +121,8 @@ for fast, friendly failure.
   JavaScript does not (invariant 32, S-check). Any UUID version passes.
 - `testOutcome`: `"success"`, `"fail"`, or a FailureCode, checked synchronously.
   The live backend rejects it on live keys.
+- `prompt`: `"pin"` only, checked synchronously. The live backend rejects it on
+  live keys.
 - `getTransaction`: at least one of `id`/`reference` required.
 
 **Verify:** the [input edge cases](./implementation-requirements.md#edge-case-testing)

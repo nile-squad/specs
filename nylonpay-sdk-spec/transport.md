@@ -83,6 +83,7 @@ accept exactly the same payload as their base actions.
 | `reference` | string | no | a valid UUID (see [Reference constraints](./operations.md#reference-constraints)) |
 | `metadata` | object | no | string keys to string values; defaults to `{}` |
 | `testOutcome` | string | no | `"success"`, `"fail"`, or a FailureCode; sandbox keys only, live keys return a `validation` error; omitted means random |
+| `prompt` | string | no | `"pin"`; sandbox keys only, live keys return a `validation` error; omitted means no PIN prompt |
 
 **`sdk-make-payout`** (and `-and-resolve`):
 
@@ -101,6 +102,7 @@ accept exactly the same payload as their base actions.
 | `reference` | string | no | a valid UUID |
 | `metadata` | object | no | string keys to string values; defaults to `{}` |
 | `testOutcome` | string | no | `"success"`, `"fail"`, or a FailureCode; sandbox keys only, live keys return a `validation` error; omitted means random |
+| `prompt` | string | no | `"pin"`; sandbox keys only, live keys return a `validation` error; omitted means no PIN prompt |
 
 **`sdk-get-status`**:
 

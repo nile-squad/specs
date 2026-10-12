@@ -46,6 +46,16 @@ Input shape:
   synchronously against `"success"`, `"fail"`, and the FailureCode union, and
   raise a `validation` error for anything else. The server rejects `testOutcome`
   on live keys with a `validation` error.
+- `prompt?`: sandbox-only. `"pin"` is the only accepted value. With `"pin"`, the
+  payment stays pending until the developer types the merchant's 5-digit customer
+  PIN on the dashboard Sandbox page. The PIN is one per merchant, and every
+  sandbox payment of that merchant accepts it, whichever sandbox key made the
+  payment. The SDK MUST validate the value synchronously against `"pin"` and
+  raise a `validation` error for anything else. The server rejects `prompt` on
+  live keys with a `validation` error. Three wrong PINs fail the payment, and no
+  PIN within about 2 minutes fails it. The `AndResolve` variants can block for
+  about 2 minutes while the PIN is pending. When `testOutcome` is also set, the
+  forced outcome applies and `prompt` is ignored.
 
 Returns: `PaymentInstance`
 
@@ -105,6 +115,7 @@ Input shape:
 - `tags?`: up to 10 labels. See [Smart Tags](#smart-tags).
 - `metadata?`: arbitrary key-value pairs
 - `testOutcome?`: sandbox-only forced outcome, same semantics as `collectPayment`.
+- `prompt?`: sandbox-only, same semantics as `collectPayment`.
 
 Returns: `PaymentInstance`
 
