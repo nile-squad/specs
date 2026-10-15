@@ -2,7 +2,7 @@
 
 Part of the [Nylon Pay SDK Spec](./spec.md).
 
-See `NylonPayConfig` type above.
+See `NylonPayConfig` in [Types](./types.md).
 
 ## Validation at init
 - `apiKey` must be present and start with `npk_`
@@ -29,8 +29,7 @@ does not move real money; a live key processes real transactions.
 
 ## Polling caps
 
-`wait()` and `*AndResolve` poll until the transaction reaches a terminal state;
-there is no default cap. Merchants who want a bounded wait set
+`wait()` and `*AndResolve` poll until the transaction reaches a terminal state by default. Merchants who want a bounded wait set
 `maxPollDurationMs` and/or `maxPollAttempts`, or use `onDelayed: "return"` to
 hand back a still-pending payment once it is flagged delayed (see
 [PaymentInstance Contract](./payment-instance.md)).

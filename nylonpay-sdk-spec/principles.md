@@ -64,8 +64,7 @@ explicitly scoped to one transaction and disposable.
 
 ## Server-side only
 
-The SDK runs in server environments. It uses OS-level fingerprinting and
-server-grade crypto primitives.
+The SDK runs in server environments because it holds an API secret in memory to sign requests and verify responses, which a browser or mobile client cannot keep secret. It also uses OS-level fingerprinting and server-grade crypto primitives.
 
 ## Spec is the ceiling
 

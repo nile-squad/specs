@@ -97,7 +97,7 @@ accept exactly the same payload as their base actions.
 | `destination.accountHolderName` | string | yes | |
 | `destination.accountNumber` | string | yes | |
 | `destination.bankName` | string | no | |
-| `destination.phone` | string | no | |
+| `destination.phone` | string | yes | required by the SDK on every payout (required by the backend on `sdk-make-payout`, optional on raw `sdk-make-payout-and-resolve`); validated and normalized to digits with the market's calling code |
 | `description` | string | yes | |
 | `reference` | string | no | a valid UUID |
 | `metadata` | object | no | string keys to string values; defaults to `{}` |

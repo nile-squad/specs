@@ -215,7 +215,7 @@ type Destination = {
   accountHolderName: string;
   accountNumber: string;
   bankName?: string;
-  phone?: string;
+  phone: string;
 };
 
 type InvoiceItem = {

@@ -18,8 +18,8 @@ implementations follow.
 
 ## Implementing an SDK from a spec
 
-1. **Start with the [Build Guide](./nylonpay-sdk-spec/build-guide.md)** — the
-   recipe that lists the components and the order to build them in, with a
+1. **Start with the [Build Guide](./nylonpay-sdk-spec/build-guide.md):** the
+   recipe listing the components and the order to build them in, with a
    verify step at the end of each stage.
 2. Read the spec end to end, principles, decision records, operations, types,
    transport contract, security, invariants, and prohibitions.

@@ -107,8 +107,8 @@ Input shape:
 - `customer`: `{ name, phoneNumber, email? }`. The `phoneNumber` is normalized
   automatically to digits with the market's calling code. Same accepted formats
   as `collectPayment`. See [Phone Number Normalization](./types.md#phone-number-normalization).
-- `destination`: `{ accountHolderName, accountNumber, bankName?, phone? }`.
-  For a bank payout, set `bankName` and put the account number in
+- `destination`: `{ accountHolderName, accountNumber, bankName?, phone }`.
+  `phone` is required by the SDK on every payout. For a bank payout, set `bankName` and put the account number in
   `accountNumber`. For mobile money, omit `bankName` and use the wallet number.
 - `description`: narration
 - `reference?`: idempotency key; when supplied, MUST be a valid UUID (see [Reference constraints](#reference-constraints))

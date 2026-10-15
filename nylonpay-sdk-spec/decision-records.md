@@ -22,6 +22,7 @@ Part of the [Nylon Pay SDK Spec](./spec.md).
 
 - **Decision:** The SDK spec defines the webhook event catalog and verification utility.
 - **Context:** Merchants need to know what events to expect and how to verify them. The verification function is an SDK export, and event types are part of the SDK's type surface.
+- **Alternatives considered:** Separate webhook documentation outside the SDK spec. Rejected: splits the merchant contract across two places and risks drift between the SDK's `verifyWebhookSignature` helper and the event shapes it verifies.
 - **Rationale:** Webhooks are the server-push complement to the SDK's client-pull model. They belong together so merchants have one document for the full integration surface.
 - **Tradeoffs:** The spec is slightly larger. Offset by keeping all merchant-facing contracts in one place.
 
@@ -37,6 +38,7 @@ Part of the [Nylon Pay SDK Spec](./spec.md).
 
 - **Decision:** All SDK requests are POST to `{baseUrl}/{action}` with JSON body.
 - **Context:** The backend uses action-based routing. The SDK mirrors this architecture directly.
+- **Alternatives considered:** REST-style path and verb routing (`GET /transactions/:id`, `POST /collections`). Rejected: the backend is action-based, so a REST layer would add URL-to-action mapping with no benefit to SDK callers.
 - **Rationale:** Action-based transport eliminates a mapping layer between SDK and server. The SDK abstracts URLs entirely, merchants call functions, not endpoints.
 - **Tradeoffs:** Merchants familiar with REST may find action-based URLs unfamiliar. Offset by the SDK hiding URLs behind function calls.
 
@@ -220,7 +222,7 @@ Part of the [Nylon Pay SDK Spec](./spec.md).
 - **Alternatives considered:** (a) Retry on the other address when a
   request fails. Rejected: a payout that reached the server but whose reply
   was lost would be sent again on the second address, paying twice.
-  (b) Keep the original default. Rejected: new integrations should start on
+  (b) Keep the original default. Rejected: new integrations must start on
   the new domain. (c) New default, original exported, no switching (chosen).
 - **Rationale:** One address per instance keeps signed requests, nonces and
   idempotency on one server path, so a retry is always the same request.

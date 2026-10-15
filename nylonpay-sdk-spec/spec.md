@@ -39,7 +39,7 @@ document is self-contained for its topic and links back here.
 | [Configuration](./configuration.md) | Factory configuration: keys, base URL, timeouts, hooks |
 | [Implementation Requirements](./implementation-requirements.md) | Unit, integration (I1–I19), and security (S1–S21) test suites; spec compliance rules |
 | [Invariants and Prohibitions](./invariants-and-prohibitions.md) | The numbered guarantees every implementation upholds and the things no SDK ever does |
-| [Decision Records](./decision-records.md) | D1–D22: why the contract is the way it is |
+| [Decision Records](./decision-records.md) | D1–D24: why the contract is the way it is |
 | [Follow-Up Work](./follow-up-work.md) | F1–F5: deferred scope |
 | [Changelog](./changelog.md) | Version history and the current spec version |
 
@@ -51,7 +51,7 @@ Pick the path that matches what you came for:
 |--------------|------|
 | Build a new SDK from scratch | [Build Guide](./build-guide.md) (the recipe, in order), then the reference docs it points to |
 | Wire up raw backend calls (no SDK yet) | [Transport Contract](./transport.md) and [Security](./security.md), especially [Action Payloads](./transport.md#action-payloads) and [Request Signing](./security.md#request-signing) |
-| Understand *why* something is the way it is | [Decision Records](./decision-records.md) (D1–D22) |
+| Understand *why* something is the way it is | [Decision Records](./decision-records.md) (D1–D24) |
 | Audit or review an implementation | [Invariants and Prohibitions](./invariants-and-prohibitions.md) and the test suites in [Implementation Requirements](./implementation-requirements.md) |
 | Check what is intentionally not done yet | [Follow-Up Work](./follow-up-work.md) (F1–F5) |
 | Follow the spec's history or current version | [Changelog](./changelog.md) |

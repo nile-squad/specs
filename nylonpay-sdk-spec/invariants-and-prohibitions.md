@@ -49,7 +49,7 @@ Part of the [Nylon Pay SDK Spec](./spec.md).
 1. The SDK never stores API secrets on disk, in logs, or in error messages. Secrets exist only in memory for the lifetime of the SDK instance.
 2. The SDK never sends API secrets in request bodies or query parameters. Secrets are used only for HMAC computation.
 3. The SDK never exposes raw provider payloads, provider names, provider references, internal transaction IDs, or idempotency keys in public return types. These are stripped during sanitization.
-4. The SDK never retries on 4xx errors except 408 and 429. Client errors (400, 401, 403, 404, 422) are returned immediately to the caller.
+4. The SDK never retries on 400, 401, 403, 404, or 422 responses. Those client errors are returned immediately to the caller. (Among 4xx responses, only 408 and 429 are eligible for retry.)
 5. The SDK never makes concurrent polls for the same PaymentInstance. Only one poll is in-flight at a time. The next poll starts only after the previous completes.
 6. The SDK never exposes the fingerprint generation algorithm as a public API. It is an internal transport concern.
 7. The SDK never modifies merchant-supplied metadata. It passes through to the server and back unchanged.
